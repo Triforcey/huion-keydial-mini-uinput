@@ -185,76 +185,53 @@ class HuionKeydialMini:
         logger.info("Starting HID notifications...")
 
         try:
-            # Find HID report characteristic
-            hid_char = await self._find_hid_characteristic()
+            # Find all notification-capable characteristics
+            notification_chars = await self._find_notification_characteristics()
 
-            if not hid_char:
-                raise RuntimeError("Could not find HID report characteristic")
+            if not notification_chars:
+                raise RuntimeError("Could not find any notification characteristics")
 
-            logger.info(f"Using characteristic: {hid_char.uuid}")
+            logger.info(f"Found {len(notification_chars)} notification characteristics")
 
-            # Start notifications
-            await self.client.start_notify(hid_char, self._handle_notification)
-            logger.info("Notifications started")
+            # Start notifications for all characteristics
+            for char in notification_chars:
+                await self.client.start_notify(char, self._handle_notification)
+                logger.info(f"Started notifications for characteristic: {char.uuid}")
 
         except Exception as e:
             logger.error(f"Failed to start notifications: {e}")
             raise
 
-    async def _find_hid_characteristic(self) -> Optional[BleakGATTCharacteristic]:
-        """Find the appropriate HID characteristic for notifications."""
+    async def _find_notification_characteristics(self) -> List[BleakGATTCharacteristic]:
+        """Find all notification-capable characteristics."""
         if not self.client:
-            return None
+            return []
 
-        # Strategy 1: Look for notification-capable characteristics in HID service
-        for service in self.client.services:
-            if service.uuid.lower() in [s.lower() for s in self.ALTERNATIVE_HID_SERVICES]:
-                logger.debug(f"Found HID service: {service.uuid}")
-
-                for char in service.characteristics:
-                    if "notify" in char.properties:
-                        logger.debug(f"Found notification characteristic: {char.uuid}")
-                        return char
-
-        # Strategy 2: Look for any notification-capable characteristic
         notification_chars = []
+
         for service in self.client.services:
             for char in service.characteristics:
                 if "notify" in char.properties:
                     notification_chars.append(char)
                     logger.debug(f"Found notification characteristic: {char.uuid} in service {service.uuid}")
 
-        if notification_chars:
-            # Prefer characteristics with "report" in the UUID or description
-            for char in notification_chars:
-                if "report" in char.uuid.lower() or "hid" in char.uuid.lower():
-                    logger.debug(f"Selected HID report characteristic: {char.uuid}")
-                    return char
+        return notification_chars
 
-            # Fallback to first notification characteristic
-            logger.debug(f"Using first notification characteristic: {notification_chars[0].uuid}")
-            return notification_chars[0]
-
-        # Strategy 3: Try the standard HID report characteristic
-        try:
-            hid_char = self.client.services.get_characteristic(self.HID_REPORT_CHAR_UUID)
-            if hid_char:
-                logger.debug(f"Using standard HID report characteristic: {hid_char.uuid}")
-                return hid_char
-        except Exception:
-            pass
-
-        return None
+    async def _find_hid_characteristic(self) -> Optional[BleakGATTCharacteristic]:
+        """Find the appropriate HID characteristic for notifications."""
+        # This method is kept for backward compatibility but now delegates to _find_notification_characteristics
+        chars = await self._find_notification_characteristics()
+        return chars[0] if chars else None
 
     async def _handle_notification(self, sender, data: bytearray):
         """Handle incoming HID data."""
         try:
             if self.debug_mode:
-                logger.debug(f"Received data: {data.hex()}")
+                logger.debug(f"Received data from {sender}: {data.hex()}")
 
-            # Parse HID data
+            # Parse HID data with characteristic information
             if self.hid_parser:
-                events = self.hid_parser.parse(data)
+                events = self.hid_parser.parse(data, characteristic_uuid=str(sender))
 
                 # Send events to uinput
                 if self.uinput_handler:
@@ -311,3 +288,73 @@ class HuionKeydialMini:
 
         await self._connect_with_retry()
         await self._start_notifications()
+
+    async def start_with_existing_connection(self):
+        """Start the device driver assuming the device is already connected."""
+        logger.info("Starting Huion Keydial Mini driver with existing connection...")
+
+        try:
+            # Find the device
+            await self._find_device()
+
+            # Initialize components
+            self.uinput_handler = UInputHandler(self.config)
+            self.hid_parser = HIDParser(self.config)
+
+            # Create uinput device
+            await self.uinput_handler.create_device()
+
+            # Connect to the already connected device
+            await self._connect_to_existing_device()
+
+            # Start listening for data
+            await self._start_notifications()
+
+            self.running = True
+            logger.info("Driver started successfully with existing connection")
+
+        except Exception as e:
+            logger.error(f"Failed to start driver: {e}")
+            await self.stop()
+            raise
+
+    async def _connect_to_existing_device(self):
+        """Connect to a device that's already connected via bluetoothctl."""
+        if not self.device_info:
+            raise RuntimeError("No device to connect to")
+
+        logger.info(f"Connecting to already connected device: {self.device_info.address}...")
+
+        # For already connected devices, we need to use a different approach
+        # Try to connect with a shorter timeout and different strategy
+        self.client = BleakClient(
+            self.device_info.address,
+            timeout=5.0  # Shorter timeout for already connected devices
+        )
+
+        try:
+            # Try to connect - this might fail if device is already connected at system level
+            await self.client.connect()
+            self.connected = True
+            logger.info("Connected successfully to existing device")
+
+            # Log available services and characteristics
+            await self._log_services()
+
+        except Exception as e:
+            logger.warning(f"Direct connection failed: {e}")
+            logger.info("Trying alternative connection method...")
+
+            # Try alternative approach - create client without connecting
+            # and try to discover services directly
+            try:
+                self.client = BleakClient(self.device_info.address)
+                # Don't call connect() - just try to access services
+                await self.client.connect(timeout=2.0)
+                self.connected = True
+                logger.info("Connected using alternative method")
+                await self._log_services()
+            except Exception as e2:
+                logger.error(f"Alternative connection also failed: {e2}")
+                self.connected = False
+                raise RuntimeError(f"Could not connect to already connected device: {e2}")

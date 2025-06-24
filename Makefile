@@ -1,4 +1,4 @@
-.PHONY: help install install-dev uninstall clean build test test-simple test-cov lint format check-deps scan run debug package-deb package-rpm package-all config-list config-bind config-unbind config-dial config-reset config-keys debug-parser debug-parser-interactive install-udev
+.PHONY: help install install-dev uninstall clean build test test-simple test-cov lint format check-deps scan run debug package-deb package-rpm package-all config-list config-bind config-unbind config-dial config-reset config-keys debug-parser debug-parser-interactive install-udev diagnose-hid
 
 PYTHON := python3
 PIP := pip3
@@ -27,6 +27,8 @@ help:
 	@echo "  scan          Scan for Huion devices"
 	@echo "  run           Run the driver (requires sudo)"
 	@echo "  debug         Run with debug logging (requires sudo)"
+	@echo "  event-logger  Run event logger to see parsed events"
+	@echo "  diagnose-hid  Run HID diagnostic tool to capture raw events"
 	@echo ""
 	@echo "Debugging:"
 	@echo "  debug-parser  Test HID parser with sample data"
@@ -119,6 +121,12 @@ debug:
 	@echo "Note: This requires sudo privileges"
 	@echo "Running with virtual environment Python and debug logging..."
 	sudo $(VENV_DIR)/bin/python -m huion_keydial_mini --log-level DEBUG
+
+event-logger:
+	sudo $(VENV_DIR)/bin/python -m huion_keydial_mini.event_logger
+
+diagnose-hid:
+	$(VENV_DIR)/bin/python diagnose_hid.py $(ARGS)
 
 debug-parser:
 	$(PYTHON) src/huion_keydial_mini/debug_parser.py

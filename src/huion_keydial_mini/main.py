@@ -129,7 +129,7 @@ async def scan_devices():
         click.echo("Check the debug output above to see all discovered devices")
 
 
-async def run_driver_with_logger(event_logger, show_raw: bool = False):
+async def run_driver_with_logger(event_logger, show_raw: bool = False, auto_connect: bool = True):
     """Run the driver with a custom event logger."""
     from .device import HuionKeydialMini
 
@@ -148,13 +148,13 @@ async def run_driver_with_logger(event_logger, show_raw: bool = False):
         async def custom_notification_handler(sender, data: bytearray):
             if show_raw:
                 event_logger.log_raw_data(data)
-            event_logger.log_parser_events(data)
+            event_logger.log_parser_events(data, characteristic_uuid=str(sender))
             # Still call the original handler for uinput events
             await original_handler(sender, data)
 
         device._handle_notification = custom_notification_handler
 
-        # Start the device
+        # Start the device (includes connection)
         await device.start()
 
         # Keep running until interrupted

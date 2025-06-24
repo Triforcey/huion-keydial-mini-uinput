@@ -37,38 +37,36 @@ class HIDParser:
         self.report_formats = {}  # Cache discovered report formats
         self.debug_mode = getattr(config, 'debug_mode', False)
 
-    def parse(self, data: bytearray) -> List[InputEvent]:
+    def parse(self, data: bytearray, characteristic_uuid: Optional[str] = None) -> List[InputEvent]:
         """Parse HID data and return input events."""
         events = []
 
         try:
             # Log raw data for debugging
             if self.debug_mode:
-                logger.debug(f"Parsing HID data: {data.hex()} (length: {len(data)})")
+                logger.debug(f"Parsing HID data: {data.hex()} (length: {len(data)}) from characteristic: {characteristic_uuid}")
 
             if len(data) < 1:
                 logger.warning(f"Received empty HID report")
                 return events
 
-            # Try different parsing strategies
-            parsed_events = []
+            # Parse based on data format rather than characteristic UUID
+            # The device is using standard HID over GATT, so we need to parse the data directly
 
-            # Strategy 1: Try known Huion Keydial Mini format
-            parsed_events = self._parse_huion_format(data)
-            if parsed_events:
-                events.extend(parsed_events)
+            # Try to parse as dial events first (f100/f103 format)
+            dial_events = self._parse_dial_events(data)
+            if dial_events:
+                events.extend(dial_events)
                 return events
 
-            # Strategy 2: Try standard HID report format
-            parsed_events = self._parse_standard_hid(data)
-            if parsed_events:
-                events.extend(parsed_events)
+            # Try to parse as button events (button ID format)
+            button_events = self._parse_button_events(data)
+            if button_events:
+                events.extend(button_events)
                 return events
 
-            # Strategy 3: Generic change detection
-            parsed_events = self._parse_generic_report(data)
-            if parsed_events:
-                events.extend(parsed_events)
+            # Fallback to generic parsing
+            events.extend(self._parse_generic_report(data))
 
         except Exception as e:
             logger.error(f"Error parsing HID data: {e}")
@@ -78,237 +76,167 @@ class HIDParser:
 
         return events
 
-    def _parse_huion_format(self, data: bytearray) -> List[InputEvent]:
-        """Parse using known Huion Keydial Mini format."""
+    def _extract_handle_from_uuid(self, uuid: str) -> str:
+        """Extract handle from characteristic UUID."""
+        # UUID format: "0000001f-0000-1000-8000-00805f9b34fb"
+        # Extract the handle part (last 2 digits before the first dash)
+        parts = uuid.split('-')
+        if parts and len(parts[0]) >= 8:
+            return parts[0][-2:]  # Last 2 characters
+        return ""
+
+    def _parse_button_events(self, data: bytearray) -> List[InputEvent]:
+        """Parse button events from Handle 0x001f format."""
         events = []
 
-        # Based on reverse engineering, Huion Keydial Mini typically sends:
-        # - Button reports: [0x01, button_state, 0x00, 0x00, ...]
-        # - Dial reports: [0x02, dial_delta_low, dial_delta_high, dial_click, ...]
-
-        if len(data) < 2:
+        if len(data) < 8:
             return events
 
-        report_type = data[0]
+        # Button format: [button_ids]00000000 (8 bytes)
+        # Looking at the actual data: 0000002800000000
+        # The button ID (28) is in the 4th byte position, not the first
 
-        if report_type == 0x01 and len(data) >= 2:
-            # Button report
-            events.extend(self._parse_button_report(data))
-        elif report_type == 0x02 and len(data) >= 4:
-            # Dial report
-            events.extend(self._parse_dial_report(data))
-        elif report_type == 0x00 and len(data) >= 8:
-            # Combined report (buttons + dial)
-            events.extend(self._parse_combined_report(data))
-
-        return events
-
-    def _parse_standard_hid(self, data: bytearray) -> List[InputEvent]:
-        """Parse using standard HID report format."""
-        events = []
-
-        if len(data) < 2:
-            return events
-
-        # Standard HID reports often have:
-        # - Report ID in first byte
-        # - Button state in subsequent bytes
-        # - Usage data for dial/scroll
-
-        report_id = data[0]
-
-        # Look for button state in common positions
-        button_positions = [1, 2, 3]  # Common button state positions
-
-        for pos in button_positions:
-            if pos < len(data):
-                button_state = data[pos]
-                if button_state != 0:  # Non-zero button state
-                    events.extend(self._parse_button_state(button_state, pos))
-
-        # Look for dial data (often in bytes 4-5 or 6-7)
-        if len(data) >= 6:
-            # Try different positions for dial data
-            dial_positions = [(4, 5), (6, 7), (2, 3)]
-
-            for low_pos, high_pos in dial_positions:
-                if high_pos < len(data):
-                    try:
-                        dial_delta = struct.unpack('<h', data[low_pos:high_pos+1])[0]
-                        if dial_delta != 0:
-                            events.extend(self._parse_dial_delta(dial_delta))
-                            break
-                    except struct.error:
-                        continue
-
-        return events
-
-    def _parse_button_report(self, data: bytearray) -> List[InputEvent]:
-        """Parse button press/release events."""
-        events = []
-
-        if len(data) < 2:
-            return events
-
-        button_state = data[1]
-        previous_button_state = self.previous_state.get('buttons', 0)
-
-        # Check each button bit (Huion Keydial Mini has 8 buttons)
+        # Extract button identifiers from all non-zero bytes
+        button_ids = []
         for i in range(8):
-            mask = 1 << i
-            current_pressed = bool(button_state & mask)
-            previous_pressed = bool(previous_button_state & mask)
+            if data[i] != 0:
+                button_ids.append(data[i])
 
-            if current_pressed != previous_pressed:
-                button_name = f'button_{i + 1}'
+        # Get previous button state
+        previous_ids = set(self.previous_state.get('button_ids', []))
+
+        # Find pressed buttons (new buttons)
+        pressed_buttons = set(button_ids) - previous_ids
+        # Find released buttons (buttons that were pressed before)
+        released_buttons = previous_ids - set(button_ids)
+
+        # Generate events for pressed buttons
+        for button_id in pressed_buttons:
+            button_name = self._get_button_name_from_id(button_id)
+            if button_name:
                 key_code = self.config.key_mappings.get(button_name)
-
                 if key_code:
-                    event_type = EventType.KEY_PRESS if current_pressed else EventType.KEY_RELEASE
                     events.append(InputEvent(
-                        event_type=event_type,
+                        event_type=EventType.KEY_PRESS,
                         key_code=key_code,
                         raw_data=data
                     ))
-                    logger.debug(f"Button {i + 1}: {'pressed' if current_pressed else 'released'}")
 
-        self.previous_state['buttons'] = button_state
-        return events
-
-    def _parse_dial_report(self, data: bytearray) -> List[InputEvent]:
-        """Parse dial rotation and click events."""
-        events = []
-
-        if len(data) < 4:
-            return events
-
-        # Dial delta (signed 16-bit, little-endian)
-        dial_delta = struct.unpack('<h', data[1:3])[0]
-
-        # Dial click state (bit 0 of byte 3)
-        dial_click = bool(data[3] & 0x01)
-
-        # Handle dial rotation
-        if dial_delta != 0:
-            events.extend(self._parse_dial_delta(dial_delta))
-
-        # Handle dial click
-        previous_dial_click = self.previous_state.get('dial_click', False)
-        if dial_click != previous_dial_click:
-            if dial_click:
-                key_code = self.config.dial_settings.get('click_key', 'KEY_ENTER')
-                events.append(InputEvent(
-                    event_type=EventType.KEY_PRESS,
-                    key_code=key_code,
-                    raw_data=data
-                ))
-                events.append(InputEvent(
-                    event_type=EventType.KEY_RELEASE,
-                    key_code=key_code,
-                    raw_data=data
-                ))
-                logger.debug("Dial clicked")
-
-        self.previous_state['dial_click'] = dial_click
-        return events
-
-    def _parse_combined_report(self, data: bytearray) -> List[InputEvent]:
-        """Parse combined button and dial report."""
-        events = []
-
-        # Combined format: [0x00, buttons_low, buttons_high, dial_delta_low, dial_delta_high, dial_click, ...]
-        if len(data) < 6:
-            return events
-
-        # Parse buttons (16-bit, but we only use first 8 bits)
-        button_state = data[1]
-        events.extend(self._parse_button_report(bytearray([0x01, button_state])))
-
-        # Parse dial
-        dial_delta = struct.unpack('<h', data[3:5])[0]
-        if dial_delta != 0:
-            events.extend(self._parse_dial_delta(dial_delta))
-
-        # Parse dial click
-        dial_click = bool(data[5] & 0x01)
-        previous_dial_click = self.previous_state.get('dial_click', False)
-        if dial_click != previous_dial_click:
-            if dial_click:
-                key_code = self.config.dial_settings.get('click_key', 'KEY_ENTER')
-                events.append(InputEvent(
-                    event_type=EventType.KEY_PRESS,
-                    key_code=key_code,
-                    raw_data=data
-                ))
-                events.append(InputEvent(
-                    event_type=EventType.KEY_RELEASE,
-                    key_code=key_code,
-                    raw_data=data
-                ))
-
-        self.previous_state['dial_click'] = dial_click
-        return events
-
-    def _parse_button_state(self, button_state: int, position: int) -> List[InputEvent]:
-        """Parse button state from a specific position."""
-        events = []
-        previous_state = self.previous_state.get(f'buttons_pos_{position}', 0)
-
-        # Only process if there's an actual change
-        if button_state == previous_state:
-            return events
-
-        for i in range(8):
-            mask = 1 << i
-            current_pressed = bool(button_state & mask)
-            previous_pressed = bool(previous_state & mask)
-
-            if current_pressed != previous_pressed:
-                button_name = f'button_{i + 1}'
+        # Generate events for released buttons
+        for button_id in released_buttons:
+            button_name = self._get_button_name_from_id(button_id)
+            if button_name:
                 key_code = self.config.key_mappings.get(button_name)
-
                 if key_code:
-                    event_type = EventType.KEY_PRESS if current_pressed else EventType.KEY_RELEASE
                     events.append(InputEvent(
-                        event_type=event_type,
-                        key_code=key_code
+                        event_type=EventType.KEY_RELEASE,
+                        key_code=key_code,
+                        raw_data=data
                     ))
 
-        self.previous_state[f'buttons_pos_{position}'] = button_state
+        # Update state
+        self.previous_state['button_ids'] = button_ids
+
         return events
 
-    def _parse_dial_delta(self, dial_delta: int) -> List[InputEvent]:
-        """Parse dial rotation delta."""
+    def _get_button_name_from_id(self, button_id: int) -> Optional[str]:
+        """Map button ID to button name based on btmon analysis."""
+        # Button ID mapping from btmon analysis
+        button_mapping = {
+            0x0e: 'button_1',
+            0x0a: 'button_2',
+            0x0f: 'button_3',
+            0x4c: 'button_4',
+            0x0c: 'button_5',
+            0x07: 'button_6',
+            0x05: 'button_7',
+            0x08: 'button_8',
+            0x16: 'button_9',
+            0x1d: 'button_10',
+            0x06: 'button_11',
+            0x19: 'button_12',
+            0x01: 'button_13',  # 0100000000000000
+            0x04: 'button_14',  # 0400000000000000
+            0x02: 'button_15',  # 0200000000000000
+            0x28: 'button_16',  # 0000002800000000
+            0x2c: 'button_17',  # 0000002c00000000
+            0x11: 'button_18',  # 0000001100000000
+        }
+
+        return button_mapping.get(button_id)
+
+    def _parse_dial_events(self, data: bytearray) -> List[InputEvent]:
+        """Parse dial events from Handle 0x0034 format."""
         events = []
 
-        # Normalize rotation direction
-        direction = 1 if dial_delta > 0 else -1
+        if len(data) < 9:
+            return events
 
-        # Generate rotation events based on sensitivity
-        sensitivity = self.config.dial_settings.get('sensitivity', 1.0)
-        # Limit the number of steps to prevent excessive events
-        steps = min(max(1, int(abs(dial_delta) * sensitivity)), 10)  # Max 10 steps
-
-        for _ in range(steps):
-            if direction > 0:
-                key_code = self.config.dial_settings.get('clockwise_key', 'KEY_VOLUMEUP')
+        # Dial format: f100[count][direction]0000000000 (9 bytes)
+        if data[0] == 0xf1 and data[1] == 0x00:
+            if data[2] == 0x03 and data[3] == 0x00:
+                # Dial click: f10300000000000000
+                key_code = self.config.dial_settings.get('click_key', 'KEY_ENTER')
+                events.append(InputEvent(
+                    event_type=EventType.KEY_PRESS,
+                    key_code=key_code,
+                    raw_data=data
+                ))
+                events.append(InputEvent(
+                    event_type=EventType.KEY_RELEASE,
+                    key_code=key_code,
+                    raw_data=data
+                ))
+            elif data[2] == 0x00 and data[3] == 0x00:
+                # Dial release: f10000000000000000
+                # No action needed for release
+                pass
             else:
-                key_code = self.config.dial_settings.get('counterclockwise_key', 'KEY_VOLUMEDOWN')
+                # Dial rotation: f100[count][direction]0000000000
+                count = data[2]
+                direction_byte = data[3]
 
-            events.append(InputEvent(
-                event_type=EventType.KEY_PRESS,
-                key_code=key_code,
-                direction=direction,
-                value=dial_delta
-            ))
-            events.append(InputEvent(
-                event_type=EventType.KEY_RELEASE,
-                key_code=key_code,
-                direction=direction,
-                value=dial_delta
-            ))
+                # Determine direction
+                if direction_byte == 0x00:
+                    # Clockwise
+                    direction = 1
+                    key_code = self.config.dial_settings.get('clockwise_key', 'KEY_VOLUMEUP')
+                elif direction_byte == 0xff:
+                    # Counter-clockwise
+                    direction = -1
+                    key_code = self.config.dial_settings.get('counterclockwise_key', 'KEY_VOLUMEDOWN')
+                else:
+                    # Unknown direction
+                    return events
 
-        logger.debug(f"Dial rotated: {dial_delta} ({direction}) - {steps} steps")
+                # Calculate movement amount
+                if direction == 1:
+                    # Clockwise: count is the movement amount
+                    movement = count
+                else:
+                    # Counter-clockwise: convert from signed byte
+                    movement = 256 - count if count > 0 else 0
+
+                # Generate events based on sensitivity
+                sensitivity = self.config.dial_settings.get('sensitivity', 1.0)
+                steps = max(1, int(movement * sensitivity))
+
+                for _ in range(steps):
+                    events.append(InputEvent(
+                        event_type=EventType.KEY_PRESS,
+                        key_code=key_code,
+                        direction=direction,
+                        value=movement,
+                        raw_data=data
+                    ))
+                    events.append(InputEvent(
+                        event_type=EventType.KEY_RELEASE,
+                        key_code=key_code,
+                        direction=direction,
+                        value=movement,
+                        raw_data=data
+                    ))
+
         return events
 
     def _parse_generic_report(self, data: bytearray) -> List[InputEvent]:

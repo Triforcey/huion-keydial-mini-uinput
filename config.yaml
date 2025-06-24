@@ -19,6 +19,16 @@ key_mappings:
   button_6: "KEY_F6"
   button_7: "KEY_F7"
   button_8: "KEY_F8"
+  button_9: "KEY_F9"
+  button_10: "KEY_F10"
+  button_11: "KEY_F11"
+  button_12: "KEY_F12"
+  button_13: "KEY_1"
+  button_14: "KEY_2"
+  button_15: "KEY_3"
+  button_16: "KEY_4"
+  button_17: "KEY_5"
+  button_18: "KEY_6"
 
 dial_settings:
   sensitivity: 1.0

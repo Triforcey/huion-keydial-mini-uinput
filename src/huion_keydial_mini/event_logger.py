@@ -62,16 +62,43 @@ class EventLogger:
         print(f"[{timestamp}] RAW: {data.hex()}")
         sys.stdout.flush()
 
-    def log_parser_events(self, data: bytearray):
+    def log_parser_events(self, data: bytearray, characteristic_uuid: Optional[str] = None):
         """Parse and log events from raw HID data."""
-        events = self.parser.parse(data)
+        # Debug: Print all incoming events to see what we're getting
+        print(f"DEBUG: Received event from characteristic: {characteristic_uuid}")
+        print(f"DEBUG: Raw data: {data.hex()}")
+
+        # Accept standard HID characteristics and let the parser handle the data
+        if characteristic_uuid:
+            handle = self._extract_handle_from_uuid(characteristic_uuid)
+            print(f"DEBUG: Extracted handle: {handle}")
+
+            # Accept standard HID Report characteristic (2a4d) and any other HID characteristics
+            if "2a4d" in characteristic_uuid.lower() or "2a4b" in characteristic_uuid.lower():
+                print(f"DEBUG: Processing HID characteristic {handle}")
+            else:
+                print(f"DEBUG: Skipping non-HID characteristic {handle}")
+                return
+
+        events = self.parser.parse(data, characteristic_uuid)
 
         if events:
             for event in events:
                 self.log_event(event, data)
         else:
-            # Log raw data if no events were parsed
-            self.log_raw_data(data)
+            # Log raw data for HID characteristics
+            if characteristic_uuid and ("2a4d" in characteristic_uuid.lower() or "2a4b" in characteristic_uuid.lower()):
+                self.log_raw_data(data)
+                print(f"  Characteristic: {characteristic_uuid}")
+
+    def _extract_handle_from_uuid(self, uuid: str) -> str:
+        """Extract handle from characteristic UUID."""
+        # UUID format: "0000001f-0000-1000-8000-00805f9b34fb"
+        # Extract the handle part (last 2 digits before the first dash)
+        parts = uuid.split('-')
+        if parts and len(parts[0]) >= 8:
+            return parts[0][-2:]  # Last 2 characters
+        return ""
 
 
 def setup_clean_logging():
@@ -137,12 +164,13 @@ def main():
         else:
             # Run the actual driver with event logging
             print("=== Huion Keydial Mini Event Logger ===")
+            print("Connecting to device...")
             print("Press Ctrl+C to stop")
             print()
 
             # Import and run the main driver with our event logger
             from .main import run_driver_with_logger
-            asyncio.run(run_driver_with_logger(logger, show_raw=args.raw))
+            asyncio.run(run_driver_with_logger(logger, show_raw=args.raw, auto_connect=True))
 
     except KeyboardInterrupt:
         print("\nStopped by user")

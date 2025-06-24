@@ -140,3 +140,18 @@ Thumbs.db
 
 # Project specific
 config_local.yaml
+
+# Build artifacts
+*.deb
+*.rpm
+*.AppImage
+*.tar.gz
+*.tar.bz2
+
+# Temporary build directories
+rpmbuild/
+*.AppDir/
+
+# Logs
+*.log
+logs/

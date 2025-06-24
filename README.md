@@ -9,6 +9,7 @@ A user space driver for the Huion Keydial Mini bluetooth device that provides HI
 - Customizable key mappings and dial settings
 - Multi-distribution Linux packaging support
 - Command-line interface for device scanning and configuration
+- **Device blacklisting to prevent kernel module conflicts**
 
 ## Requirements
 
@@ -34,6 +35,9 @@ pip install -r requirements.txt
 
 # Install the package
 pip install -e .
+
+# Install udev rules for device blacklisting (recommended)
+make install-udev
 ```
 
 ### System Installation
@@ -45,6 +49,67 @@ sudo pip install .
 # Or build and install a wheel
 python -m build
 sudo pip install dist/huion_keydial_mini_driver-*.whl
+
+# Install udev rules for device blacklisting
+make install-udev
+```
+
+## Device Blacklisting
+
+The driver includes udev rules that unbind the `hid-generic` kernel module from Huion Keydial Mini devices. This ensures that your userspace driver can exclusively handle these specific devices.
+
+The udev rules target devices with:
+- Vendor ID: `256c` (Huion)
+- Product ID: `8251` (Keydial Mini)
+- Name containing "Keydial"
+
+### Automatic Installation
+
+```bash
+# Install udev rules automatically
+make install-udev
+```
+
+### Manual Installation
+
+```bash
+# Copy udev rules
+sudo cp packaging/udev/99-huion-keydial-mini.rules /etc/udev/rules.d/
+
+# Reload udev rules
+sudo udevadm control --reload-rules
+
+# Trigger rules for existing devices
+sudo udevadm trigger
+```
+
+### What the udev rules do:
+
+1. **Unbinds hid-generic** from Huion Keydial Mini devices (vendor: 256c, product: 8251)
+2. **Matches devices precisely** by vendor ID, product ID, and name containing "Keydial"
+3. **Allows exclusive access** for the userspace driver
+4. **Device-specific** - Only affects Huion Keydial Mini devices, not other HID devices
+
+### Troubleshooting Device Conflicts
+
+If you experience conflicts with kernel modules:
+
+```bash
+# Check if hid-generic is loaded
+lsmod | grep hid
+
+# Check device attributes
+sudo udevadm info -a -p $(udevadm info -q path -n /dev/input/eventX)
+
+# Manually unbind hid-generic from a specific device (if needed)
+echo "device_id" | sudo tee /sys/bus/hid/drivers/hid-generic/unbind
+
+# Check device ownership
+ls -la /dev/input/
+ls -la /dev/hidraw*
+
+# Verify udev rules are active
+sudo udevadm test /sys/class/hid/hidraw0
 ```
 
 ## Usage
@@ -109,6 +174,9 @@ keydialctl reset
 For development convenience, you can also use Makefile targets:
 
 ```bash
+# Device blacklisting
+make install-udev                                    # Install udev rules
+
 # Configuration management
 make config-list                                    # List current bindings
 make config-bind BUTTON=button_1 KEY=KEY_F1        # Bind a button
@@ -121,6 +189,7 @@ make install-dev                                    # Install in development mod
 make scan                                          # Scan for devices
 make run                                           # Run driver (requires sudo)
 make debug                                         # Run with debug logging
+make debug-parser                                  # Test HID parser
 ```
 
 ## Configuration
@@ -201,81 +270,115 @@ git clone https://github.com/your-username/huion-keydial-mini-uinput.git
 cd huion-keydial-mini-uinput
 
 # Create virtual environment
-python3 -m venv venv
+make venv-dev
+
+# Activate virtual environment
 source venv/bin/activate
 
 # Install in development mode
-pip install -e .
+make install-dev
 
-# Install development dependencies
-pip install pytest black flake8 mypy
+# Install udev rules
+make install-udev
 ```
 
-### Running Tests
+### Testing
 
 ```bash
-pytest tests/
+# Test HID parser with sample data
+make debug-parser
+
+# Interactive HID parser testing
+make debug-parser-interactive
+
+# Run linters
+make lint
+
+# Format code
+make format
+
+# Run tests
+make test
 ```
 
-### Code Formatting
+### Debugging
 
 ```bash
-black src/
-flake8 src/
-mypy src/
-```
+# Run with debug logging
+make debug
 
-## Building Packages
+# Test device scanning
+make scan
 
-### Building Python Wheel
-
-```bash
-pip install build
-python -m build
-```
-
-### Building DEB Package
-
-```bash
-# Install build dependencies
-sudo apt install build-essential debhelper dh-python python3-all python3-setuptools
-
-# Build the package
-dpkg-buildpackage -us -uc -b
-```
-
-### Building RPM Package
-
-```bash
-# Install build dependencies
-sudo dnf install rpm-build python3-devel
-
-# Build the package
-python setup.py bdist_rpm
+# Check device information
+sudo huion-keydial-mini --log-level DEBUG --device-address AA:BB:CC:DD:EE:FF
 ```
 
 ## Troubleshooting
 
-### Permission Issues
+### Common Issues
 
-The driver requires root privileges to create uinput devices. Make sure to run with `sudo`.
+1. **Permission denied for uinput**
+   ```bash
+   # Add user to input group
+   sudo usermod -a -G input $USER
+   # Then log out and back in
+   ```
 
-### Bluetooth Issues
+2. **Device not found**
+   ```bash
+   # Check if device is paired
+   bluetoothctl paired-devices
 
-1. Ensure Bluetooth is enabled: `sudo systemctl enable bluetooth`
-2. Check if the device is paired: `bluetoothctl paired-devices`
-3. Make sure no other applications are using the device
+   # Check if udev rules are installed
+   ls /etc/udev/rules.d/99-huion-keydial-mini.rules
+   ```
 
-### Device Not Found
+3. **Kernel module conflicts**
+   ```bash
+   # Unload conflicting modules
+   sudo modprobe -r hid-generic
 
-1. Verify the device is in pairing mode
-2. Check the device name matches the expected names in the scanner
-3. Try scanning with a longer timeout: `--scan-timeout 30`
+   # Install udev rules
+   make install-udev
+   ```
+
+4. **Bluetooth connection issues**
+   ```bash
+   # Check Bluetooth status
+   systemctl status bluetooth
+
+   # Restart Bluetooth service
+   sudo systemctl restart bluetooth
+   ```
+
+### Debug Information
+
+```bash
+# Get detailed device information
+sudo huion-keydial-mini --log-level DEBUG
+
+# Check udev rules
+sudo udevadm test /sys/class/bluetooth/hci0
+
+# Monitor udev events
+sudo udevadm monitor --property --subsystem-match=bluetooth
+```
 
 ## License
 
-MIT License - see LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## Acknowledgments
+
+- [Bleak](https://github.com/hbldh/bleak) for Bluetooth Low Energy support
+- [evdev](https://github.com/gvalkov/python-evdev) for Linux input device handling
+- [Click](https://click.palletsprojects.com/) for command-line interface

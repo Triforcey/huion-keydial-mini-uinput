@@ -116,7 +116,8 @@ async def scan_devices():
     from .scanner import DeviceScanner
 
     logger.info("Scanning for Huion devices...")
-    scanner = DeviceScanner()
+    # Enable debug mode to see all discovered devices
+    scanner = DeviceScanner(debug_mode=True)
     devices = await scanner.scan()
 
     if devices:
@@ -125,6 +126,49 @@ async def scan_devices():
             click.echo(f"  {device.address} - {device.name}")
     else:
         click.echo("No Huion devices found")
+        click.echo("Check the debug output above to see all discovered devices")
+
+
+async def run_driver_with_logger(event_logger, show_raw: bool = False):
+    """Run the driver with a custom event logger."""
+    from .device import HuionKeydialMini
+
+    # Set up clean logging
+    logging.getLogger('bleak').setLevel(logging.WARNING)
+    logging.getLogger('asyncio').setLevel(logging.WARNING)
+    logging.getLogger('dbus_fast').setLevel(logging.WARNING)
+
+    try:
+        # Initialize the device
+        device = HuionKeydialMini(event_logger.config)
+
+        # Override the device's notification handler to use our logger
+        original_handler = device._handle_notification
+
+        async def custom_notification_handler(sender, data: bytearray):
+            if show_raw:
+                event_logger.log_raw_data(data)
+            event_logger.log_parser_events(data)
+            # Still call the original handler for uinput events
+            await original_handler(sender, data)
+
+        device._handle_notification = custom_notification_handler
+
+        # Start the device
+        await device.start()
+
+        # Keep running until interrupted
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            await device.stop()
+
+    except Exception as e:
+        print(f"Error: {e}")
+        raise
 
 
 if __name__ == '__main__':

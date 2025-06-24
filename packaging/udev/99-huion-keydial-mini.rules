@@ -1,0 +1,15 @@
+# udev rules for Huion Keydial Mini
+# This prevents kernel modules from claiming the first input device (input0) of the Keydial Mini
+
+# Only unbind hid-generic from the first input occurrence (input0) of the Huion Keydial Mini
+ACTION=="add", SUBSYSTEMS=="input", ATTRS{id/vendor}=="256c", ATTRS{id/product}=="8251", ATTRS{name}=="*Keydial*", RUN+="/usr/local/bin/unbind-huion.sh $env{DEVPATH}"
+
+# Installation instructions:
+# 1. Copy this file to /etc/udev/rules.d/
+#    sudo cp 99-huion-keydial-mini.rules /etc/udev/rules.d/
+# 2. Copy the unbind script to /usr/local/bin/
+#    sudo cp unbind-huion.sh /usr/local/bin/
+# 3. Reload udev rules
+#    sudo udevadm control --reload-rules
+# 4. Trigger rules for existing devices
+#    sudo udevadm trigger

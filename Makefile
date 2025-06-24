@@ -1,4 +1,4 @@
-.PHONY: help install install-dev uninstall clean build test lint format check-deps scan run debug package-deb package-rpm package-all config-list config-bind config-unbind config-dial config-reset config-keys
+.PHONY: help install install-dev uninstall clean build test test-simple test-cov lint format check-deps scan run debug package-deb package-rpm package-all config-list config-bind config-unbind config-dial config-reset config-keys debug-parser debug-parser-interactive install-udev
 
 PYTHON := python3
 PIP := pip3
@@ -11,11 +11,14 @@ help:
 	@echo "  install       Install the package"
 	@echo "  install-dev   Install in development mode with dev dependencies"
 	@echo "  uninstall     Uninstall the package"
+	@echo "  install-udev  Install modprobe blacklist for device conflicts"
 	@echo ""
 	@echo "Development:"
 	@echo "  clean         Clean build artifacts"
 	@echo "  build         Build wheel package"
-	@echo "  test          Run tests"
+	@echo "  test          Run tests with pytest"
+	@echo "  test-simple   Run simple tests without pytest"
+	@echo "  test-cov      Run tests with coverage"
 	@echo "  lint          Run linters"
 	@echo "  format        Format code"
 	@echo "  check-deps    Check for dependency issues"
@@ -24,6 +27,10 @@ help:
 	@echo "  scan          Scan for Huion devices"
 	@echo "  run           Run the driver (requires sudo)"
 	@echo "  debug         Run with debug logging (requires sudo)"
+	@echo ""
+	@echo "Debugging:"
+	@echo "  debug-parser  Test HID parser with sample data"
+	@echo "  debug-parser-interactive  Interactive HID parser test"
 	@echo ""
 	@echo "Packaging:"
 	@echo "  package-deb   Build DEB package"
@@ -43,10 +50,14 @@ install:
 
 install-dev:
 	$(PIP) install -e .
-	$(PIP) install pytest black flake8 mypy build
+	$(PIP) install -e ".[test]"
 
 uninstall:
 	$(PIP) uninstall -y huion-keydial-mini-driver
+
+install-udev:
+	@echo "Installing modprobe blacklist for device conflicts..."
+	sudo ./packaging/install-udev.sh
 
 clean:
 	rm -rf build/
@@ -54,6 +65,8 @@ clean:
 	rm -rf *.egg-info/
 	rm -rf .pytest_cache/
 	rm -rf .mypy_cache/
+	rm -rf htmlcov/
+	rm -rf .coverage
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 
@@ -61,7 +74,28 @@ build: clean
 	$(PYTHON) -m build
 
 test:
-	pytest tests/ -v
+	@echo "Running tests with pytest..."
+	@if command -v pytest >/dev/null 2>&1; then \
+		pytest tests/ -v --tb=short; \
+	else \
+		echo "pytest not found. Installing test dependencies..."; \
+		$(PIP) install -e ".[test]"; \
+		pytest tests/ -v --tb=short; \
+	fi
+
+test-simple:
+	@echo "Running simple tests without pytest..."
+	$(PYTHON) tests/run_tests.py
+
+test-cov:
+	@echo "Running tests with coverage..."
+	@if command -v pytest >/dev/null 2>&1; then \
+		pytest tests/ -v --cov=src/huion_keydial_mini --cov-report=html --cov-report=term; \
+	else \
+		echo "pytest not found. Installing test dependencies..."; \
+		$(PIP) install -e ".[test]"; \
+		pytest tests/ -v --cov=src/huion_keydial_mini --cov-report=html --cov-report=term; \
+	fi
 
 lint:
 	flake8 src/
@@ -74,15 +108,23 @@ check-deps:
 	$(PIP) check
 
 scan:
-	huion-keydial-mini --scan
+	$(VENV_DIR)/bin/python -m huion_keydial_mini --scan
 
 run:
 	@echo "Note: This requires sudo privileges"
-	sudo huion-keydial-mini
+	@echo "Running with virtual environment Python..."
+	sudo $(VENV_DIR)/bin/python -m huion_keydial_mini
 
 debug:
 	@echo "Note: This requires sudo privileges"
-	sudo huion-keydial-mini --log-level DEBUG
+	@echo "Running with virtual environment Python and debug logging..."
+	sudo $(VENV_DIR)/bin/python -m huion_keydial_mini --log-level DEBUG
+
+debug-parser:
+	$(PYTHON) src/huion_keydial_mini/debug_parser.py
+
+debug-parser-interactive:
+	$(PYTHON) src/huion_keydial_mini/debug_parser.py --interactive
 
 package-deb:
 	./packaging/build.sh
@@ -100,7 +142,7 @@ venv:
 	$(VENV_DIR)/bin/pip install -e .
 
 venv-dev: venv
-	$(VENV_DIR)/bin/pip install pytest black flake8 mypy build
+	$(VENV_DIR)/bin/pip install -e ".[test]"
 
 activate:
 	@echo "Run: source $(VENV_DIR)/bin/activate"

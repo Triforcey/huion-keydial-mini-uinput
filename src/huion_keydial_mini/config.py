@@ -11,6 +11,8 @@ class Config:
 
     def __init__(self, data: Dict[str, Any]):
         self.data = self._validate_config_data(data)
+        # Preserve all top-level keys for global options
+        self._global = {k: v for k, v in data.items() if k not in self.data}
 
     def _validate_config_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Validate and normalize configuration data."""
@@ -115,6 +117,11 @@ class Config:
                 result[key] = value
 
         return result
+
+    @property
+    def debug_mode(self) -> bool:
+        # Prefer top-level debug_mode, fallback to False
+        return bool(self._global.get('debug_mode', False))
 
     @classmethod
     def load(cls, config_path: Optional[str] = None, device_address: Optional[str] = None) -> 'Config':

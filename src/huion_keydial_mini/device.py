@@ -234,9 +234,9 @@ class HuionKeydialMini:
                 events = self.hid_parser.parse(data, characteristic_uuid=str(sender))
 
                 # Send events to uinput
-                if self.uinput_handler:
-                    for event in events:
-                        await self.uinput_handler.send_event(event)
+                # if self.uinput_handler:
+                #     for event in events:
+                #         await self.uinput_handler.send_event(event)
 
         except Exception as e:
             logger.error(f"Error handling notification: {e}")

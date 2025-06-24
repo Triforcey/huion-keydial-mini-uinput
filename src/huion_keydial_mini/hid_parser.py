@@ -1,5 +1,6 @@
 """HID data parser for the Huion Keydial Mini."""
 
+from ast import Continue
 import logging
 import struct
 from typing import List, NamedTuple, Optional, Dict, Any
@@ -65,9 +66,6 @@ class HIDParser:
                 events.extend(button_events)
                 return events
 
-            # Fallback to generic parsing
-            events.extend(self._parse_generic_report(data))
-
         except Exception as e:
             logger.error(f"Error parsing HID data: {e}")
             if self.debug_mode:
@@ -92,57 +90,56 @@ class HIDParser:
         if len(data) < 8:
             return events
 
-        # Button format: [button_ids]00000000 (8 bytes)
-        # Looking at the actual data: 0000002800000000
-        # The button ID (28) is in the 4th byte position, not the first
+        # Validate that this is actually button data (not dial data)
+        # Button data should NOT start with 0xf1 (which is dial data)
+        if data[0] == 0xf1:
+            # Not button data
+            return events
 
-        # Extract button identifiers from all non-zero bytes
-        button_ids = []
-        for i in range(8):
-            if data[i] != 0:
-                button_ids.append(data[i])
+        # Get current button names from data
+        current_button_names = self._get_button_names_from_data(data)
 
         # Get previous button state
-        previous_ids = set(self.previous_state.get('button_ids', []))
+        previous_button_names = set(self.previous_state.get('button_names', []))
 
         # Find pressed buttons (new buttons)
-        pressed_buttons = set(button_ids) - previous_ids
+        pressed_buttons = set(current_button_names) - previous_button_names
         # Find released buttons (buttons that were pressed before)
-        released_buttons = previous_ids - set(button_ids)
+        released_buttons = previous_button_names - set(current_button_names)
 
         # Generate events for pressed buttons
-        for button_id in pressed_buttons:
-            button_name = self._get_button_name_from_id(button_id)
-            if button_name:
-                key_code = self.config.key_mappings.get(button_name)
-                if key_code:
-                    events.append(InputEvent(
-                        event_type=EventType.KEY_PRESS,
-                        key_code=key_code,
-                        raw_data=data
-                    ))
+        for button_name in pressed_buttons:
+            key_code = button_name
+            if key_code:
+                events.append(InputEvent(
+                    event_type=EventType.KEY_PRESS,
+                    key_code=key_code,
+                    raw_data=data
+                ))
 
         # Generate events for released buttons
-        for button_id in released_buttons:
-            button_name = self._get_button_name_from_id(button_id)
-            if button_name:
-                key_code = self.config.key_mappings.get(button_name)
-                if key_code:
-                    events.append(InputEvent(
-                        event_type=EventType.KEY_RELEASE,
-                        key_code=key_code,
-                        raw_data=data
-                    ))
+        for button_name in released_buttons:
+            key_code = button_name
+            if key_code:
+                events.append(InputEvent(
+                    event_type=EventType.KEY_RELEASE,
+                    key_code=key_code,
+                    raw_data=data
+                ))
 
         # Update state
-        self.previous_state['button_ids'] = button_ids
+        self.previous_state['button_names'] = current_button_names
 
         return events
 
-    def _get_button_name_from_id(self, button_id: int) -> Optional[str]:
-        """Map button ID to button name based on btmon analysis."""
-        # Button ID mapping from btmon analysis
-        button_mapping = {
+    def _get_button_names_from_data(self, data: bytearray) -> List[str]:
+        """ Get button names from data """
+        button_names = []
+        # There are 2 types of button signals going on
+        # First we'll handle type 1. Type 1 button combo signals start at the 4th byte,
+        # and signal up to 3 buttons in 3 bytes. Order is not preserved.
+        # Some 4 button combos are possible, but not all so we'll just use the first 3.
+        type1_button_mappings = {
             0x0e: 'button_1',
             0x0a: 'button_2',
             0x0f: 'button_3',
@@ -155,42 +152,58 @@ class HIDParser:
             0x1d: 'button_10',
             0x06: 'button_11',
             0x19: 'button_12',
-            0x01: 'button_13',  # 0100000000000000
-            0x04: 'button_14',  # 0400000000000000
-            0x02: 'button_15',  # 0200000000000000
-            0x28: 'button_16',  # 0000002800000000
-            0x2c: 'button_17',  # 0000002c00000000
-            0x11: 'button_18',  # 0000001100000000
+            0x28: 'button_16',
+            0x2c: 'button_17',
+            0x11: 'button_18',
         }
 
-        return button_mapping.get(button_id)
+        for i in range(3, 6):
+            button_name = type1_button_mappings.get(data[i])
+            if button_name:
+                button_names.append(button_name)
+
+        # Now for type 2. Type 2 button combo signals use only the first byte using bitmasking.
+        # The bits are:
+        # button 13: bit 0
+        # button 14: bit 2
+        # button 15: bit 1
+        type2_button_mappings = {
+            0x01: 'button_13',
+            0x04: 'button_14',
+            0x02: 'button_15',
+        }
+        for key, value in type2_button_mappings.items():
+            if data[0] & key:
+                button_names.append(value)
+
+        return button_names
 
     def _parse_dial_events(self, data: bytearray) -> List[InputEvent]:
         """Parse dial events from Handle 0x0034 format."""
         events = []
 
-        if len(data) < 9:
+        if len(data) < 8:
             return events
 
-        # Dial format: f100[count][direction]0000000000 (9 bytes)
-        if data[0] == 0xf1 and data[1] == 0x00:
-            if data[2] == 0x03 and data[3] == 0x00:
+        # Dial format: f1[clicked][count][direction]0000000000 (9 bytes)
+        if data[0] == 0xf1:
+            if data[2] == 0x00:
                 # Dial click: f10300000000000000
-                key_code = self.config.dial_settings.get('click_key', 'KEY_ENTER')
-                events.append(InputEvent(
-                    event_type=EventType.KEY_PRESS,
-                    key_code=key_code,
-                    raw_data=data
-                ))
-                events.append(InputEvent(
-                    event_type=EventType.KEY_RELEASE,
-                    key_code=key_code,
-                    raw_data=data
-                ))
-            elif data[2] == 0x00 and data[3] == 0x00:
-                # Dial release: f10000000000000000
-                # No action needed for release
-                pass
+                key_code = 'DIAL_CLICK'
+                if data[1] == 0x03 and not self.previous_state.get('dial_clicked', False):
+                    events.append(InputEvent(
+                        event_type=EventType.KEY_PRESS,
+                        key_code=key_code,
+                        raw_data=data
+                    ))
+                    self.previous_state['dial_clicked'] = True
+                elif data[1] == 0x00 and self.previous_state.get('dial_clicked', False):
+                    events.append(InputEvent(
+                        event_type=EventType.KEY_RELEASE,
+                        key_code=key_code,
+                        raw_data=data
+                    ))
+                    self.previous_state['dial_clicked'] = False
             else:
                 # Dial rotation: f100[count][direction]0000000000
                 count = data[2]
@@ -200,11 +213,11 @@ class HIDParser:
                 if direction_byte == 0x00:
                     # Clockwise
                     direction = 1
-                    key_code = self.config.dial_settings.get('clockwise_key', 'KEY_VOLUMEUP')
+                    key_code = 'DIAL_CW'
                 elif direction_byte == 0xff:
                     # Counter-clockwise
                     direction = -1
-                    key_code = self.config.dial_settings.get('counterclockwise_key', 'KEY_VOLUMEDOWN')
+                    key_code = 'DIAL_CCW'
                 else:
                     # Unknown direction
                     return events
@@ -237,42 +250,6 @@ class HIDParser:
                         raw_data=data
                     ))
 
-        return events
-
-    def _parse_generic_report(self, data: bytearray) -> List[InputEvent]:
-        """Parse generic HID report when format is unknown."""
-        events = []
-
-        # This is a fallback parser that tries to detect changes in the data
-        # and map them to events. It's very basic and will need refinement.
-
-        previous_data = self.previous_state.get('raw_data', bytearray())
-
-        if len(previous_data) == len(data):
-            # Look for changes in the data
-            for i, (prev_byte, curr_byte) in enumerate(zip(previous_data, data)):
-                if prev_byte != curr_byte:
-                    if self.debug_mode:
-                        logger.debug(f"Data change at byte {i}: {prev_byte:02x} -> {curr_byte:02x}")
-
-                    # Try to interpret as button state
-                    if i == 1:  # Assume byte 1 might be button state
-                        changed_bits = prev_byte ^ curr_byte
-                        for bit in range(8):
-                            if changed_bits & (1 << bit):
-                                button_name = f'button_{bit + 1}'
-                                key_code = self.config.key_mappings.get(button_name)
-
-                                if key_code:
-                                    pressed = bool(curr_byte & (1 << bit))
-                                    event_type = EventType.KEY_PRESS if pressed else EventType.KEY_RELEASE
-                                    events.append(InputEvent(
-                                        event_type=event_type,
-                                        key_code=key_code,
-                                        raw_data=data
-                                    ))
-
-        self.previous_state['raw_data'] = bytearray(data)
         return events
 
     def reset_state(self):

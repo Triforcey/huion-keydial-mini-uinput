@@ -19,6 +19,7 @@ class EventLogger:
         self.config = config
         self.parser = HIDParser(config)
         self.event_count = 0
+        self.debug_mode = getattr(config, "debug_mode", False)
 
     def log_event(self, event: InputEvent, raw_data: Optional[bytearray] = None):
         """Log a single HID event in a readable format."""
@@ -65,11 +66,11 @@ class EventLogger:
     def log_parser_events(self, data: bytearray, characteristic_uuid: Optional[str] = None):
         """Parse and log events from raw HID data."""
         # Debug: Print all incoming events to see what we're getting
-        print(f"DEBUG: Received event from characteristic: {characteristic_uuid}")
-        print(f"DEBUG: Raw data: {data.hex()}")
+        if (self.debug_mode): print(f"DEBUG: Received event from characteristic: {characteristic_uuid}")
+        if (self.debug_mode): print(f"DEBUG: Raw data: {data.hex()}")
 
         # Accept standard HID characteristics and let the parser handle the data
-        if characteristic_uuid:
+        if characteristic_uuid and self.debug_mode:
             handle = self._extract_handle_from_uuid(characteristic_uuid)
             print(f"DEBUG: Extracted handle: {handle}")
 
@@ -85,7 +86,7 @@ class EventLogger:
         if events:
             for event in events:
                 self.log_event(event, data)
-        else:
+        elif self.debug_mode:
             # Log raw data for HID characteristics
             if characteristic_uuid and ("2a4d" in characteristic_uuid.lower() or "2a4b" in characteristic_uuid.lower()):
                 self.log_raw_data(data)

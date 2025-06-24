@@ -1,0 +1,6 @@
+bleak>=0.21.1
+evdev>=1.6.1
+pyudev>=0.24.1
+asyncio-mqtt>=0.13.0
+click>=8.1.7
+pyyaml>=6.0.1

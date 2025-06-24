@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --with python3 --buildsystem=pybuild
+
+override_dh_auto_install:
+	dh_auto_install
+	# Install systemd service file
+	install -D -m 644 packaging/systemd/huion-keydial-mini.service \
+		debian/huion-keydial-mini-driver/lib/systemd/system/huion-keydial-mini.service
+	# Install configuration file
+	install -D -m 644 config.yaml \
+		debian/huion-keydial-mini-driver/etc/huion-keydial-mini/config.yaml
+
+override_dh_installinit:
+	dh_installinit --name=huion-keydial-mini

@@ -1,0 +1,27 @@
+device:
+  name: "Huion Keydial Mini"
+  # address: "AA:BB:CC:DD:EE:FF"  # Optional: uncomment and set specific device address
+
+bluetooth:
+  scan_timeout: 10.0
+  connection_timeout: 30.0
+  reconnect_attempts: 3
+
+uinput:
+  device_name: "Huion Keydial Mini"
+
+key_mappings:
+  button_1: "KEY_F1"
+  button_2: "KEY_F2"
+  button_3: "KEY_F3"
+  button_4: "KEY_F4"
+  button_5: "KEY_F5"
+  button_6: "KEY_F6"
+  button_7: "KEY_F7"
+  button_8: "KEY_F8"
+
+dial_settings:
+  sensitivity: 1.0
+  clockwise_key: "KEY_VOLUMEUP"
+  counterclockwise_key: "KEY_VOLUMEDOWN"
+  click_key: "KEY_ENTER"

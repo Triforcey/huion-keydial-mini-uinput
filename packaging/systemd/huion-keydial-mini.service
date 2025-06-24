@@ -1,0 +1,25 @@
+[Unit]
+Description=Huion Keydial Mini Driver
+After=bluetooth.target
+Wants=bluetooth.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/huion-keydial-mini
+Restart=always
+RestartSec=5
+User=root
+Group=root
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=false
+DevicePolicy=closed
+DeviceAllow=/dev/uinput rw
+DeviceAllow=/dev/input/* rw
+
+[Install]
+WantedBy=multi-user.target

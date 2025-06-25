@@ -140,21 +140,21 @@ class HIDParser:
         # and signal up to 3 buttons in 3 bytes. Order is not preserved.
         # Some 4 button combos are possible, but not all so we'll just use the first 3.
         type1_button_mappings = {
-            0x0e: 'button_1',
-            0x0a: 'button_2',
-            0x0f: 'button_3',
-            0x4c: 'button_4',
-            0x0c: 'button_5',
-            0x07: 'button_6',
-            0x05: 'button_7',
-            0x08: 'button_8',
-            0x16: 'button_9',
-            0x1d: 'button_10',
-            0x06: 'button_11',
-            0x19: 'button_12',
-            0x28: 'button_16',
-            0x2c: 'button_17',
-            0x11: 'button_18',
+            0x0e: 'BUTTON_1',
+            0x0a: 'BUTTON_2',
+            0x0f: 'BUTTON_3',
+            0x4c: 'BUTTON_4',
+            0x0c: 'BUTTON_5',
+            0x07: 'BUTTON_6',
+            0x05: 'BUTTON_7',
+            0x08: 'BUTTON_8',
+            0x16: 'BUTTON_9',
+            0x1d: 'BUTTON_10',
+            0x06: 'BUTTON_11',
+            0x19: 'BUTTON_12',
+            0x28: 'BUTTON_16',
+            0x2c: 'BUTTON_17',
+            0x11: 'BUTTON_18',
         }
 
         for i in range(3, 6):
@@ -168,9 +168,9 @@ class HIDParser:
         # button 14: bit 2
         # button 15: bit 1
         type2_button_mappings = {
-            0x01: 'button_13',
-            0x04: 'button_14',
-            0x02: 'button_15',
+            0x01: 'BUTTON_13',
+            0x04: 'BUTTON_14',
+            0x02: 'BUTTON_15',
         }
         for key, value in type2_button_mappings.items():
             if data[0] & key:

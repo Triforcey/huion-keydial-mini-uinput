@@ -81,7 +81,10 @@ class DriverManager:
 @click.option('--scan', '-s',
               is_flag=True,
               help='Scan for available Huion devices')
-def main(config: Optional[str], device_address: Optional[str], log_level: str, scan: bool):
+@click.option('--user', '-u',
+              is_flag=True,
+              help='Run as user-level service (for systemd user service)')
+def main(config: Optional[str], device_address: Optional[str], log_level: str, scan: bool, user: bool):
     """Huion Keydial Mini driver main entry point."""
 
     # Set up logging

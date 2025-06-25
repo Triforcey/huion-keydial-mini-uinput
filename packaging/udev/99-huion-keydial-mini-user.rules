@@ -1,0 +1,8 @@
+# Huion Keydial Mini - User access to uinput
+# This rule allows users to create virtual input devices
+
+# Allow users in the 'input' group to access uinput
+KERNEL=="uinput", MODE="0666", GROUP="input"
+
+# Alternative: Allow specific user (replace 'username' with actual username)
+# KERNEL=="uinput", MODE="0666", OWNER="username"

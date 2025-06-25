@@ -8,6 +8,7 @@ from evdev import UInput, ecodes
 
 from .config import Config
 from .hid_parser import InputEvent, EventType
+from .keybind_manager import KeybindManager, KeybindAction, EventType as BindEventType
 
 
 logger = logging.getLogger(__name__)
@@ -58,17 +59,56 @@ class UInputHandler:
         'KEY_RIGHTALT': ecodes.KEY_RIGHTALT,
         'KEY_LEFTMETA': ecodes.KEY_LEFTMETA,
         'KEY_RIGHTMETA': ecodes.KEY_RIGHTMETA,
+        'KEY_A': ecodes.KEY_A,
+        'KEY_B': ecodes.KEY_B,
+        'KEY_C': ecodes.KEY_C,
+        'KEY_D': ecodes.KEY_D,
+        'KEY_E': ecodes.KEY_E,
+        'KEY_F': ecodes.KEY_F,
+        'KEY_G': ecodes.KEY_G,
+        'KEY_H': ecodes.KEY_H,
+        'KEY_I': ecodes.KEY_I,
+        'KEY_J': ecodes.KEY_J,
+        'KEY_K': ecodes.KEY_K,
+        'KEY_L': ecodes.KEY_L,
+        'KEY_M': ecodes.KEY_M,
+        'KEY_N': ecodes.KEY_N,
+        'KEY_O': ecodes.KEY_O,
+        'KEY_P': ecodes.KEY_P,
+        'KEY_Q': ecodes.KEY_Q,
+        'KEY_R': ecodes.KEY_R,
+        'KEY_S': ecodes.KEY_S,
+        'KEY_T': ecodes.KEY_T,
+        'KEY_U': ecodes.KEY_U,
+        'KEY_V': ecodes.KEY_V,
+        'KEY_W': ecodes.KEY_W,
+        'KEY_X': ecodes.KEY_X,
+        'KEY_Y': ecodes.KEY_Y,
+        'KEY_Z': ecodes.KEY_Z,
+        'KEY_1': ecodes.KEY_1,
+        'KEY_2': ecodes.KEY_2,
+        'KEY_3': ecodes.KEY_3,
+        'KEY_4': ecodes.KEY_4,
+        'KEY_5': ecodes.KEY_5,
+        'KEY_6': ecodes.KEY_6,
+        'KEY_7': ecodes.KEY_7,
+        'KEY_8': ecodes.KEY_8,
+        'KEY_9': ecodes.KEY_9,
+        'KEY_0': ecodes.KEY_0,
     }
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, keybind_manager: Optional[KeybindManager] = None):
         self.config = config
+        self.keybind_manager = keybind_manager
         self.device: Optional[UInput] = None
         self.capabilities = self._build_capabilities()
 
     def _build_capabilities(self) -> Dict:
-        """Build device capabilities based on configuration."""
+        """Build device capabilities based on configuration and keybind manager."""
         capabilities = {
             evdev.ecodes.EV_KEY: [],
+            evdev.ecodes.EV_REL: [evdev.ecodes.REL_X, evdev.ecodes.REL_Y, evdev.ecodes.REL_WHEEL],
+            evdev.ecodes.EV_ABS: [],
         }
 
         # Add all possible keys that might be used
@@ -77,24 +117,14 @@ class UInputHandler:
             if key_code and key_code not in capabilities[evdev.ecodes.EV_KEY]:
                 capabilities[evdev.ecodes.EV_KEY].append(key_code)
 
-        # Add keys from configuration
-        for key_name in self.config.key_mappings.values():
-            key_code = self.KEY_MAPPING.get(key_name)
-            if key_code and key_code not in capabilities[evdev.ecodes.EV_KEY]:
-                capabilities[evdev.ecodes.EV_KEY].append(key_code)
-
-        # Add dial keys
-        dial_keys = [
-            self.config.dial_settings.get('clockwise_key'),
-            self.config.dial_settings.get('counterclockwise_key'),
-            self.config.dial_settings.get('click_key'),
-        ]
-
-        for key_name in dial_keys:
-            if key_name:
-                key_code = self.KEY_MAPPING.get(key_name)
-                if key_code and key_code not in capabilities[evdev.ecodes.EV_KEY]:
-                    capabilities[evdev.ecodes.EV_KEY].append(key_code)
+        # Add keys from keybind manager if available
+        if self.keybind_manager:
+            for action in self.keybind_manager.get_all_actions().values():
+                if action.keys:
+                    for key_name in action.keys:
+                        key_code = self.KEY_MAPPING.get(key_name)
+                        if key_code and key_code not in capabilities[evdev.ecodes.EV_KEY]:
+                            capabilities[evdev.ecodes.EV_KEY].append(key_code)
 
         return capabilities
 
@@ -136,44 +166,132 @@ class UInputHandler:
             return
 
         try:
-            if event.event_type in [EventType.KEY_PRESS, EventType.KEY_RELEASE]:
-                if not event.key_code:
-                    logger.warning("Key event without key code")
-                    return
+            # Get the action ID from the event
+            action_id = self._get_action_id_from_event(event)
+            if not action_id:
+                logger.debug(f"No action ID found for event: {event}")
+                return
 
-                # Handle key combinations (e.g., "KEY_CTRL+KEY_C")
-                key_parts = [k.strip() for k in event.key_code.split('+')]
-                key_codes = []
+            # Get the keybind action from the manager
+            if not self.keybind_manager:
+                logger.warning("No keybind manager available")
+                return
 
-                for key_name in key_parts:
-                    key_code = self.KEY_MAPPING.get(key_name)
-                    if not key_code:
-                        logger.warning(f"Unknown key code: {key_name}")
-                        return
-                    key_codes.append(key_code)
+            action = self.keybind_manager.get_action(action_id)
+            if not action:
+                logger.debug(f"No binding found for action: {action_id}")
+                return
 
-                # Send key events
-                value = 1 if event.event_type == EventType.KEY_PRESS else 0
-
-                if value == 1:  # Press
-                    # Press all keys in order
-                    for key_code in key_codes:
-                        self.device.write(evdev.ecodes.EV_KEY, key_code, 1)
-                        self.device.syn()
-                else:  # Release
-                    # Release all keys in reverse order
-                    for key_code in reversed(key_codes):
-                        self.device.write(evdev.ecodes.EV_KEY, key_code, 0)
-                        self.device.syn()
-
-                logger.debug(f"Sent key event: {event.key_code} = {value}")
-
+            # Execute the action based on its type
+            if action.type == BindEventType.KEYBOARD:
+                await self._send_keyboard_action(action, event)
+            elif action.type == BindEventType.MOUSE:
+                await self._send_mouse_action(action, event)
+            elif action.type == BindEventType.COMBO:
+                await self._send_combo_action(action, event)
             else:
-                logger.warning(f"Unsupported event type: {event.event_type}")
+                logger.warning(f"Unknown action type: {action.type}")
 
         except Exception as e:
             logger.error(f"Error sending event: {e}")
 
+    def _get_action_id_from_event(self, event: InputEvent) -> Optional[str]:
+        if event.key_code != None:
+            return event.key_code
+        else:
+            logger.warning(f"No keycode found for event: {event}")
+        return None
+
+    async def _send_keyboard_action(self, action: KeybindAction, event: InputEvent):
+        """Send a keyboard action."""
+        if not action.keys:
+            logger.warning("Keyboard action has no keys defined")
+            return
+
+        if not self.device:
+            logger.warning("No virtual device available")
+            return
+
+        # Determine if this is a press or release
+        is_press = event.event_type == EventType.KEY_PRESS
+
+        try:
+            if is_press:
+                # Press all keys in order
+                for key_name in action.keys:
+                    key_code = self.KEY_MAPPING.get(key_name)
+                    if key_code:
+                        self.device.write(evdev.ecodes.EV_KEY, key_code, 1)
+                        self.device.syn()
+                        logger.debug(f"Pressed key: {key_name}")
+                    else:
+                        logger.warning(f"Unknown key: {key_name}")
+            else:
+                # Release all keys in reverse order
+                for key_name in reversed(action.keys):
+                    key_code = self.KEY_MAPPING.get(key_name)
+                    if key_code:
+                        self.device.write(evdev.ecodes.EV_KEY, key_code, 0)
+                        self.device.syn()
+                        logger.debug(f"Released key: {key_name}")
+                    else:
+                        logger.warning(f"Unknown key: {key_name}")
+
+        except Exception as e:
+            logger.error(f"Error sending keyboard action: {e}")
+
+    async def _send_mouse_action(self, action: KeybindAction, event: InputEvent):
+        """Send a mouse action."""
+        if not action.mouse_action:
+            logger.warning("Mouse action has no action defined")
+            return
+
+        if not self.device:
+            logger.warning("No virtual device available")
+            return
+
+        try:
+            if action.mouse_action == "scroll":
+                # Handle scroll events
+                if event.direction:
+                    scroll_amount = event.direction * 3  # Adjust sensitivity
+                    self.device.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_WHEEL, scroll_amount)
+                    self.device.syn()
+                    logger.debug(f"Mouse scroll: {scroll_amount}")
+
+            elif action.mouse_action == "click":
+                # Handle mouse clicks
+                if action.mouse_button == "left":
+                    button_code = evdev.ecodes.BTN_LEFT
+                elif action.mouse_button == "right":
+                    button_code = evdev.ecodes.BTN_RIGHT
+                elif action.mouse_button == "middle":
+                    button_code = evdev.ecodes.BTN_MIDDLE
+                else:
+                    button_code = evdev.ecodes.BTN_LEFT  # Default to left
+
+                is_press = event.event_type == EventType.KEY_PRESS
+                value = 1 if is_press else 0
+
+                self.device.write(evdev.ecodes.EV_KEY, button_code, value)
+                self.device.syn()
+                logger.debug(f"Mouse {action.mouse_button} click: {value}")
+
+        except Exception as e:
+            logger.error(f"Error sending mouse action: {e}")
+
+    async def _send_combo_action(self, action: KeybindAction, event: InputEvent):
+        """Send a combo action (keyboard + mouse)."""
+        # For now, treat combo as keyboard action
+        # This can be expanded later for true keyboard+mouse combos
+        await self._send_keyboard_action(action, event)
+
     def get_supported_keys(self) -> List[str]:
         """Get list of supported key names."""
         return list(self.KEY_MAPPING.keys())
+
+    def set_keybind_manager(self, keybind_manager: KeybindManager):
+        """Set the keybind manager and rebuild capabilities."""
+        self.keybind_manager = keybind_manager
+        self.capabilities = self._build_capabilities()
+        logger.info("Updated keybind manager and rebuilt capabilities")

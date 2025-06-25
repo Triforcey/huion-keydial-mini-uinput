@@ -13,6 +13,7 @@ from .config import Config
 from .uinput_handler import UInputHandler
 from .hid_parser import HIDParser
 from .scanner import DeviceScanner
+from .keybind_manager import KeybindManager
 
 
 logger = logging.getLogger(__name__)
@@ -45,20 +46,20 @@ class HuionKeydialMini:
         self.debug_mode = getattr(config, 'debug_mode', False)
 
         # Initialize components
+        self.keybind_manager = KeybindManager(config)
         self.hid_parser = HIDParser(config)
-        self.uinput_handler = UInputHandler(config)
+        self.uinput_handler = UInputHandler(config, self.keybind_manager)
 
     async def start(self):
         """Start the device driver."""
         logger.info("Starting Huion Keydial Mini driver...")
 
         try:
+            # Start the keybind manager socket server
+            await self.keybind_manager.start_socket_server()
+
             # Find the device
             await self._find_device()
-
-            # Initialize components
-            self.uinput_handler = UInputHandler(self.config)
-            self.hid_parser = HIDParser(self.config)
 
             # Create uinput device
             await self.uinput_handler.create_device()
@@ -91,6 +92,9 @@ class HuionKeydialMini:
 
         if self.uinput_handler:
             await self.uinput_handler.destroy_device()
+
+        if self.keybind_manager:
+            await self.keybind_manager.stop_socket_server()
 
         self.connected = False
         logger.info("Driver stopped")
@@ -234,9 +238,17 @@ class HuionKeydialMini:
                 events = self.hid_parser.parse(data, characteristic_uuid=str(sender))
 
                 # Send events to uinput
-                # if self.uinput_handler:
-                #     for event in events:
-                #         await self.uinput_handler.send_event(event)
+                if self.uinput_handler and events:
+                    for event in events:
+                        try:
+                            await self.uinput_handler.send_event(event)
+                            if self.debug_mode:
+                                logger.debug(f"Sent uinput event: {event.event_type} - {event.key_code}")
+                        except Exception as e:
+                            logger.error(f"Error sending uinput event: {e}")
+                            if self.debug_mode:
+                                import traceback
+                                logger.debug(traceback.format_exc())
 
         except Exception as e:
             logger.error(f"Error handling notification: {e}")

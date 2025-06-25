@@ -12,9 +12,16 @@ import yaml
 from .config import Config
 from .scanner import DeviceScanner
 from .uinput_handler import UInputHandler
+from .keybind_manager import send_command, KeybindAction, EventType
 
 
 logger = logging.getLogger(__name__)
+
+
+def get_socket_path() -> str:
+    """Get the default socket path for the user-level service."""
+    socket_dir = Path.home() / ".local" / "share" / "huion-keydial-mini"
+    return str(socket_dir / "control.sock")
 
 
 @click.group()
@@ -49,259 +56,308 @@ def scan(ctx):
 
 
 @cli.command()
-@click.argument('button', type=click.Choice([
+@click.argument('action_id', type=click.Choice([
     'button_1', 'button_2', 'button_3', 'button_4',
-    'button_5', 'button_6', 'button_7', 'button_8'
+    'button_5', 'button_6', 'button_7', 'button_8',
+    'dial_clockwise', 'dial_counterclockwise', 'dial_click'
 ]))
-@click.argument('key')
+@click.argument('action_type', type=click.Choice(['keyboard', 'mouse', 'combo']))
+@click.argument('action_data')
 @click.pass_context
-def bind(ctx, button: str, key: str):
-    """Bind a button to a key.
+def bind(ctx, action_id: str, action_type: str, action_data: str):
+    """Bind an action to a key or mouse event.
 
-    BUTTON: Button identifier (button_1 through button_8)
-    KEY: Key code (e.g., KEY_F1, KEY_VOLUMEUP, KEY_CTRL+KEY_C)
+    ACTION_ID: Action identifier (button_1-8, dial_clockwise, etc.)
+    ACTION_TYPE: Type of action (keyboard, mouse, combo)
+    ACTION_DATA: Action data (e.g., "KEY_F1", "KEY_CTRL+KEY_C", "scroll", "left_click")
     """
-    config_path = ctx.obj.get('config_path')
-    config = _load_config(config_path)
+    async def do_bind():
+        socket_path = get_socket_path()
 
-    # Validate key code
-    uinput = UInputHandler(config)
-    supported_keys = uinput.get_supported_keys()
+        # Parse action data based on type
+        if action_type == 'keyboard':
+            keys = [k.strip() for k in action_data.split('+')]
+            action = {
+                'type': 'keyboard',
+                'keys': keys,
+                'description': f"{action_id} -> {action_data}"
+            }
+        elif action_type == 'mouse':
+            if action_data == 'scroll':
+                action = {
+                    'type': 'mouse',
+                    'mouse_action': 'scroll',
+                    'description': f"{action_id} -> mouse scroll"
+                }
+            elif action_data.endswith('_click'):
+                button = action_data.replace('_click', '')
+                action = {
+                    'type': 'mouse',
+                    'mouse_action': 'click',
+                    'mouse_button': button,
+                    'description': f"{action_id} -> {button} click"
+                }
+            else:
+                click.echo(f"Error: Unknown mouse action '{action_data}'", err=True)
+                click.echo("Supported mouse actions: scroll, left_click, right_click, middle_click")
+                return
+        else:  # combo
+            keys = [k.strip() for k in action_data.split('+')]
+            action = {
+                'type': 'combo',
+                'keys': keys,
+                'description': f"{action_id} -> combo {action_data}"
+            }
 
-    # Handle key combinations
-    keys = [k.strip() for k in key.split('+')]
-    for k in keys:
-        if k not in supported_keys:
-            click.echo(f"Error: Unsupported key '{k}'", err=True)
-            click.echo(f"Supported keys: {', '.join(sorted(supported_keys))}")
+        command = {
+            'command': 'set_binding',
+            'action_id': action_id,
+            'action': action
+        }
+
+        response = await send_command(socket_path, command)
+
+        if response['status'] == 'success':
+            click.echo(f"Bound {action_id} to {action_data}")
+        else:
+            click.echo(f"Error: {response['message']}", err=True)
             sys.exit(1)
 
-    # Update configuration
-    config.data['key_mappings'][button] = key
-
-    # Save configuration
-    config_file = _get_config_file(config_path)
-    config.save(str(config_file))
-
-    click.echo(f"Bound {button} to {key}")
-    click.echo(f"Configuration saved to: {config_file}")
+    asyncio.run(do_bind())
 
 
 @cli.command()
-@click.argument('button', type=click.Choice([
+@click.argument('action_id', type=click.Choice([
     'button_1', 'button_2', 'button_3', 'button_4',
-    'button_5', 'button_6', 'button_7', 'button_8'
+    'button_5', 'button_6', 'button_7', 'button_8',
+    'dial_clockwise', 'dial_counterclockwise', 'dial_click'
 ]))
 @click.pass_context
-def unbind(ctx, button: str):
-    """Remove binding for a button.
+def unbind(ctx, action_id: str):
+    """Remove binding for an action.
 
-    BUTTON: Button identifier (button_1 through button_8)
+    ACTION_ID: Action identifier (button_1-8, dial_clockwise, etc.)
     """
-    config_path = ctx.obj.get('config_path')
-    config = _load_config(config_path)
+    async def do_unbind():
+        socket_path = get_socket_path()
 
-    if button in config.data['key_mappings']:
-        old_binding = config.data['key_mappings'][button]
-        del config.data['key_mappings'][button]
+        command = {
+            'command': 'remove_binding',
+            'action_id': action_id
+        }
 
-        # Save configuration
-        config_file = _get_config_file(config_path)
-        config.save(str(config_file))
+        response = await send_command(socket_path, command)
 
-        click.echo(f"Removed binding for {button} (was: {old_binding})")
-        click.echo(f"Configuration saved to: {config_file}")
-    else:
-        click.echo(f"No binding found for {button}")
-
-
-@cli.command()
-@click.option('--clockwise', help='Key for clockwise rotation')
-@click.option('--counterclockwise', help='Key for counterclockwise rotation')
-@click.option('--click', help='Key for dial click')
-@click.option('--sensitivity', type=float, help='Dial sensitivity (default: 1.0)')
-@click.pass_context
-def dial(ctx, clockwise: Optional[str], counterclockwise: Optional[str],
-         click_key: Optional[str], sensitivity: Optional[float]):
-    """Configure dial settings."""
-    config_path = ctx.obj.get('config_path')
-    config = _load_config(config_path)
-
-    # Validate keys
-    uinput = UInputHandler(config)
-    supported_keys = uinput.get_supported_keys()
-
-    updates = {}
-
-    if clockwise:
-        if clockwise not in supported_keys:
-            click.echo(f"Error: Unsupported key '{clockwise}'", err=True)
+        if response['status'] == 'success':
+            click.echo(f"Removed binding for {action_id}")
+        else:
+            click.echo(f"Error: {response['message']}", err=True)
             sys.exit(1)
-        updates['clockwise_key'] = clockwise
 
-    if counterclockwise:
-        if counterclockwise not in supported_keys:
-            click.echo(f"Error: Unsupported key '{counterclockwise}'", err=True)
-            sys.exit(1)
-        updates['counterclockwise_key'] = counterclockwise
-
-    if click_key:
-        if click_key not in supported_keys:
-            click.echo(f"Error: Unsupported key '{click_key}'", err=True)
-            sys.exit(1)
-        updates['click_key'] = click_key
-
-    if sensitivity is not None:
-        if sensitivity <= 0:
-            click.echo("Error: Sensitivity must be positive", err=True)
-            sys.exit(1)
-        updates['sensitivity'] = sensitivity
-
-    if not updates:
-        click.echo("No changes specified")
-        return
-
-    # Update configuration
-    config.data['dial_settings'].update(updates)
-
-    # Save configuration
-    config_file = _get_config_file(config_path)
-    config.save(str(config_file))
-
-    click.echo("Dial settings updated:")
-    for key, value in updates.items():
-        click.echo(f"  {key}: {value}")
-    click.echo(f"Configuration saved to: {config_file}")
+    asyncio.run(do_unbind())
 
 
 @cli.command()
 @click.pass_context
 def list_bindings(ctx):
     """List current key bindings."""
-    config_path = ctx.obj.get('config_path')
-    config = _load_config(config_path)
+    async def do_list():
+        socket_path = get_socket_path()
 
-    click.echo("Current key bindings:")
-    click.echo()
+        command = {
+            'command': 'get_bindings'
+        }
 
-    # Button mappings
-    click.echo("Buttons:")
-    for button in ['button_1', 'button_2', 'button_3', 'button_4',
-                   'button_5', 'button_6', 'button_7', 'button_8']:
-        key = config.key_mappings.get(button, 'unbound')
-        click.echo(f"  {button}: {key}")
+        response = await send_command(socket_path, command)
 
-    click.echo()
+        if response['status'] == 'success':
+            bindings = response['bindings']
 
-    # Dial settings
-    click.echo("Dial:")
-    dial_settings = config.dial_settings
-    click.echo(f"  clockwise: {dial_settings.get('clockwise_key', 'unset')}")
-    click.echo(f"  counterclockwise: {dial_settings.get('counterclockwise_key', 'unset')}")
-    click.echo(f"  click: {dial_settings.get('click_key', 'unset')}")
-    click.echo(f"  sensitivity: {dial_settings.get('sensitivity', 1.0)}")
+            if not bindings:
+                click.echo("No bindings configured")
+                return
+
+            click.echo("Current bindings:")
+            click.echo()
+
+            for action_id, action_data in bindings.items():
+                action_type = action_data['type']
+                description = action_data.get('description', 'No description')
+
+                if action_type == 'keyboard':
+                    keys = '+'.join(action_data['keys']) if action_data['keys'] else 'none'
+                    click.echo(f"  {action_id}: {keys} ({action_type})")
+                elif action_type == 'mouse':
+                    if action_data['mouse_action'] == 'scroll':
+                        click.echo(f"  {action_id}: mouse scroll ({action_type})")
+                    elif action_data['mouse_action'] == 'click':
+                        button = action_data['mouse_button']
+                        click.echo(f"  {action_id}: {button} click ({action_type})")
+                else:
+                    click.echo(f"  {action_id}: {description} ({action_type})")
+        else:
+            # Fallback to config file if service is not running
+            click.echo(f"Service not running: {response['message']}")
+            click.echo("Showing bindings from config file:")
+            click.echo()
+
+            config_path = ctx.obj.get('config_path')
+            config = _load_config(config_path)
+
+            # Show button mappings
+            for button in ['button_1', 'button_2', 'button_3', 'button_4',
+                          'button_5', 'button_6', 'button_7', 'button_8']:
+                key = config.key_mappings.get(button, 'unbound')
+                click.echo(f"  {button}: {key}")
+
+            # Show dial settings
+            dial_settings = config.dial_settings
+            click.echo(f"  dial_clockwise: {dial_settings.get('clockwise_key', 'unset')}")
+            click.echo(f"  dial_counterclockwise: {dial_settings.get('counterclockwise_key', 'unset')}")
+            click.echo(f"  dial_click: {dial_settings.get('click_key', 'unset')}")
+
+            click.echo()
+            click.echo("Note: Start the service to use runtime keybind management")
+
+    asyncio.run(do_list())
 
 
 @cli.command()
 @click.pass_context
 def list_keys(ctx):
-    """List available key codes."""
+    """List supported key codes."""
     config_path = ctx.obj.get('config_path')
     config = _load_config(config_path)
-
     uinput = UInputHandler(config)
-    keys = sorted(uinput.get_supported_keys())
+    supported_keys = uinput.get_supported_keys()
 
-    click.echo("Available key codes:")
+    click.echo("Supported key codes:")
     click.echo()
 
     # Group keys by category
-    categories = {
-        'Function Keys': [k for k in keys if k.startswith('KEY_F')],
-        'Volume/Media': [k for k in keys if any(x in k for x in ['VOLUME', 'PLAY', 'MUTE', 'SONG'])],
-        'Navigation': [k for k in keys if any(x in k for x in ['UP', 'DOWN', 'LEFT', 'RIGHT', 'HOME', 'END', 'PAGE'])],
-        'Modifiers': [k for k in keys if any(x in k for x in ['CTRL', 'SHIFT', 'ALT', 'META'])],
-        'Other': [k for k in keys if not any(cat in k for cat in ['F', 'VOLUME', 'PLAY', 'MUTE', 'SONG', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'HOME', 'END', 'PAGE', 'CTRL', 'SHIFT', 'ALT', 'META'])]
-    }
+    function_keys = [k for k in supported_keys if k.startswith('KEY_F')]
+    modifier_keys = [k for k in supported_keys if 'CTRL' in k or 'SHIFT' in k or 'ALT' in k or 'META' in k]
+    navigation_keys = [k for k in supported_keys if k in ['KEY_UP', 'KEY_DOWN', 'KEY_LEFT', 'KEY_RIGHT', 'KEY_HOME', 'KEY_END', 'KEY_PAGEUP', 'KEY_PAGEDOWN']]
+    media_keys = [k for k in supported_keys if k in ['KEY_VOLUMEUP', 'KEY_VOLUMEDOWN', 'KEY_MUTE', 'KEY_PLAYPAUSE', 'KEY_NEXTSONG', 'KEY_PREVIOUSSONG']]
+    letter_keys = [k for k in supported_keys if len(k) == 4 and k.startswith('KEY_') and k[4:].isalpha()]
+    number_keys = [k for k in supported_keys if len(k) == 4 and k.startswith('KEY_') and k[4:].isdigit()]
+    other_keys = [k for k in supported_keys if k not in function_keys + modifier_keys + navigation_keys + media_keys + letter_keys + number_keys]
 
-    for category, category_keys in categories.items():
-        if category_keys:
-            click.echo(f"{category}:")
-            for i, key in enumerate(category_keys):
-                if i % 3 == 0:
-                    click.echo("  ", nl=False)
-                click.echo(f"{key:<20}", nl=False)
-                if (i + 1) % 3 == 0:
-                    click.echo()
-            if len(category_keys) % 3 != 0:
-                click.echo()
-            click.echo()
+    if function_keys:
+        click.echo("Function keys:")
+        for key in sorted(function_keys):
+            click.echo(f"  {key}")
+        click.echo()
+
+    if modifier_keys:
+        click.echo("Modifier keys:")
+        for key in sorted(modifier_keys):
+            click.echo(f"  {key}")
+        click.echo()
+
+    if navigation_keys:
+        click.echo("Navigation keys:")
+        for key in sorted(navigation_keys):
+            click.echo(f"  {key}")
+        click.echo()
+
+    if media_keys:
+        click.echo("Media keys:")
+        for key in sorted(media_keys):
+            click.echo(f"  {key}")
+        click.echo()
+
+    if letter_keys:
+        click.echo("Letter keys:")
+        for key in sorted(letter_keys):
+            click.echo(f"  {key}")
+        click.echo()
+
+    if number_keys:
+        click.echo("Number keys:")
+        for key in sorted(number_keys):
+            click.echo(f"  {key}")
+        click.echo()
+
+    if other_keys:
+        click.echo("Other keys:")
+        for key in sorted(other_keys):
+            click.echo(f"  {key}")
 
 
 @cli.command()
 @click.argument('device_address')
 @click.pass_context
 def set_device(ctx, device_address: str):
-    """Set the device address to connect to.
-
-    DEVICE_ADDRESS: Bluetooth MAC address (e.g., AA:BB:CC:DD:EE:FF)
-    """
+    """Set the device address in configuration."""
     config_path = ctx.obj.get('config_path')
     config = _load_config(config_path)
 
-    # Validate MAC address format
-    import re
-    mac_pattern = re.compile(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$')
-    if not mac_pattern.match(device_address):
-        click.echo("Error: Invalid MAC address format. Use AA:BB:CC:DD:EE:FF", err=True)
+    # Validate device address format
+    if not device_address or len(device_address) != 17:
+        click.echo("Error: Invalid device address format", err=True)
+        click.echo("Expected format: XX:XX:XX:XX:XX:XX")
         sys.exit(1)
 
     # Update configuration
-    config.data['device']['address'] = device_address.upper()
+    config.data['device_address'] = device_address
 
     # Save configuration
     config_file = _get_config_file(config_path)
     config.save(str(config_file))
 
-    click.echo(f"Device address set to: {device_address.upper()}")
+    click.echo(f"Device address set to: {device_address}")
     click.echo(f"Configuration saved to: {config_file}")
 
 
 @cli.command()
 @click.pass_context
 def clear_device(ctx):
-    """Clear the device address (auto-discover mode)."""
+    """Clear the device address from configuration."""
     config_path = ctx.obj.get('config_path')
     config = _load_config(config_path)
 
-    # Update configuration
-    config.data['device']['address'] = None
+    if 'device_address' in config.data:
+        old_address = config.data['device_address']
+        del config.data['device_address']
 
-    # Save configuration
-    config_file = _get_config_file(config_path)
-    config.save(str(config_file))
+        # Save configuration
+        config_file = _get_config_file(config_path)
+        config.save(str(config_file))
 
-    click.echo("Device address cleared (will auto-discover)")
-    click.echo(f"Configuration saved to: {config_file}")
+        click.echo(f"Cleared device address (was: {old_address})")
+        click.echo(f"Configuration saved to: {config_file}")
+    else:
+        click.echo("No device address configured")
 
 
 @cli.command()
 @click.pass_context
 def reset(ctx):
     """Reset configuration to defaults."""
-    if not click.confirm("This will reset all configuration to defaults. Continue?"):
-        click.echo("Cancelled")
-        return
-
     config_path = ctx.obj.get('config_path')
-    config_file = _get_config_file(config_path)
+    config = _load_config(config_path)
 
     # Create default configuration
-    default_config = Config._get_default_config()
+    default_config = {
+        'device_address': None,
+        'key_mappings': {},
+        'dial_settings': {
+            'clockwise_key': 'KEY_VOLUMEUP',
+            'counterclockwise_key': 'KEY_VOLUMEDOWN',
+            'click_key': 'KEY_MUTE',
+            'sensitivity': 1.0
+        },
+        'uinput_device_name': 'Huion Keydial Mini',
+        'connection_timeout': 10.0,
+        'debug_mode': False
+    }
 
-    # Save default configuration
-    with open(config_file, 'w') as f:
-        yaml.dump(default_config, f, default_flow_style=False)
+    config.data = default_config
+
+    # Save configuration
+    config_file = _get_config_file(config_path)
+    config.save(str(config_file))
 
     click.echo("Configuration reset to defaults")
     click.echo(f"Configuration saved to: {config_file}")
@@ -309,34 +365,15 @@ def reset(ctx):
 
 def _load_config(config_path: Optional[str]) -> Config:
     """Load configuration from file."""
-    try:
-        return Config.load(config_path)
-    except Exception as e:
-        click.echo(f"Error loading configuration: {e}", err=True)
-        sys.exit(1)
+    return Config.load(config_path)
 
 
 def _get_config_file(config_path: Optional[str]) -> Path:
-    """Get the configuration file path."""
+    """Get configuration file path."""
     if config_path:
         return Path(config_path)
-
-    # Use default locations
-    candidates = [
-        Path.cwd() / 'config.yaml',
-        Path.home() / '.config' / 'huion-keydial-mini' / 'config.yaml',
-        Path('/etc/huion-keydial-mini/config.yaml'),
-    ]
-
-    # Find existing config or use the user config location
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-
-    # Use user config location as default
-    user_config = Path.home() / '.config' / 'huion-keydial-mini' / 'config.yaml'
-    user_config.parent.mkdir(parents=True, exist_ok=True)
-    return user_config
+    else:
+        return Path.home() / '.config' / 'huion-keydial-mini' / 'config.yaml'
 
 
 if __name__ == '__main__':

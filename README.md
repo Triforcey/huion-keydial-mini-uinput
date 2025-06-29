@@ -144,6 +144,38 @@ keydialctl set-device AA:BB:CC:DD:EE:FF
 keydialctl clear-device
 ```
 
+### Automatic Connection Detection
+
+The driver now supports automatic detection of device connections via DBus monitoring. This means:
+
+- **Start the service early**: You can start the service at boot time, even before the device is connected
+- **Automatic attachment**: When you pair/connect your Keydial Mini via `bluetoothctl`, GNOME settings, or any other method, the driver will automatically detect and attach to it
+- **No manual intervention**: No need to restart the service when connecting/disconnecting the device
+
+**How it works:**
+- The driver monitors BlueZ DBus signals for device connection events
+- When a Huion device connects, the driver automatically attaches to it
+- Supports both specific device addresses and auto-discovery of any Huion device
+
+**Configuration:**
+```yaml
+# Enable automatic connection detection (default: true)
+bluetooth:
+  auto_reconnect: true
+```
+
+**Testing the feature:**
+```bash
+# Start the service
+systemctl --user start huion-keydial-mini.service
+
+# Connect your device via bluetoothctl or system settings
+bluetoothctl connect AA:BB:CC:DD:EE:FF
+
+# The driver should automatically detect and attach to the device
+journalctl --user -u huion-keydial-mini.service -f
+```
+
 ## Configuration
 
 The configuration file is located at `~/.config/huion-keydial-mini/config.yaml`:
@@ -167,6 +199,7 @@ uinput_device_name: "Huion Keydial Mini"
 
 # Connection settings
 connection_timeout: 10.0
+auto_reconnect: true  # Enable automatic connection detection via DBus
 
 # Debug mode
 debug_mode: false
@@ -257,6 +290,9 @@ python -m huion_keydial_mini --scan
 
 # Test with debug logging
 python -m huion_keydial_mini --log-level DEBUG
+
+# Test Bluetooth watcher
+python test_bluetooth_watcher.py
 ```
 
 ## License
@@ -276,3 +312,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Bleak](https://github.com/hbldh/bleak) for Bluetooth Low Energy support
 - [evdev](https://github.com/gvalkov/python-evdev) for Linux input device handling
 - [Click](https://click.palletsprojects.com/) for command-line interface
+- [dbus-next](https://github.com/altdesktop/python-dbus-next) for DBus integration

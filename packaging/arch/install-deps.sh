@@ -12,7 +12,8 @@ sudo pacman -S --needed --asdeps \
     python-bleak \
     python-pyudev \
     python-click \
-    python-pyyaml
+    python-pyyaml \
+    python-dbus-next
 
 echo "Dependencies installed successfully!"
 echo ""

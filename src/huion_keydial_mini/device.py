@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Optional, Callable, Dict, Any, List
+from typing import Optional, Callable, Dict, Any, List, NamedTuple, Union
 import struct
 
 from bleak import BleakClient, BleakScanner
@@ -12,11 +12,18 @@ from bleak.backends.characteristic import BleakGATTCharacteristic
 from .config import Config
 from .uinput_handler import UInputHandler
 from .hid_parser import HIDParser
-from .scanner import DeviceScanner
+from .scanner import DeviceScanner, DiscoveredDevice
 from .keybind_manager import KeybindManager
+from .bluetooth_watcher import BluetoothWatcher
 
 
 logger = logging.getLogger(__name__)
+
+
+class DeviceInfo(NamedTuple):
+    """Device information structure."""
+    address: str
+    name: str
 
 
 class HuionKeydialMini:
@@ -37,18 +44,23 @@ class HuionKeydialMini:
     def __init__(self, config: Config):
         self.config = config
         self.device: Optional[BLEDevice] = None
-        self.device_info = None
+        self.device_info: Optional[Union[DeviceInfo, DiscoveredDevice]] = None
         self.client: Optional[BleakClient] = None
         self.connected = False
         self.running = False
         self.reconnect_attempts = 0
         self.max_reconnect_attempts = 5
         self.debug_mode = getattr(config, 'debug_mode', False)
+        self.auto_reconnect = getattr(config, 'auto_reconnect', True)
 
         # Initialize components
         self.keybind_manager = KeybindManager(config)
         self.hid_parser = HIDParser(config)
         self.uinput_handler = UInputHandler(config, self.keybind_manager)
+
+        # Initialize Bluetooth watcher for automatic connection detection
+        self.bluetooth_watcher: Optional[BluetoothWatcher] = None
+        self.watcher_task: Optional[asyncio.Task] = None
 
     async def start(self):
         """Start the device driver."""
@@ -58,17 +70,15 @@ class HuionKeydialMini:
             # Start the keybind manager socket server
             await self.keybind_manager.start_socket_server()
 
-            # Find the device
-            await self._find_device()
+            # Start Bluetooth watcher for automatic connection detection
+            if self.auto_reconnect:
+                await self._start_bluetooth_watcher()
 
-            # Connect to the device
-            await self._connect_with_retry()
-
-            # Start listening for data
-            await self._start_notifications()
+            # Try to attach to already connected devices
+            await self._try_attach_to_existing_devices()
 
             self.running = True
-            logger.info("Driver started successfully")
+            logger.info("Driver started successfully - waiting for device connections")
 
         except Exception as e:
             logger.error(f"Failed to start driver: {e}")
@@ -80,6 +90,18 @@ class HuionKeydialMini:
         logger.info("Stopping driver...")
 
         self.running = False
+
+        # Stop Bluetooth watcher
+        if self.bluetooth_watcher:
+            await self.bluetooth_watcher.stop()
+            self.bluetooth_watcher = None
+
+        if self.watcher_task and not self.watcher_task.done():
+            self.watcher_task.cancel()
+            try:
+                await self.watcher_task
+            except asyncio.CancelledError:
+                pass
 
         if self.client and self.connected:
             try:
@@ -95,6 +117,165 @@ class HuionKeydialMini:
 
         self.connected = False
         logger.info("Driver stopped")
+
+    async def _start_bluetooth_watcher(self):
+        """Start the Bluetooth connection watcher."""
+        try:
+            # Create Bluetooth watcher with callbacks for device connections and disconnections
+            self.bluetooth_watcher = BluetoothWatcher(
+                target_mac=self.config.device_address,
+                on_connect_callback=self._on_device_connected_via_dbus,
+                on_disconnect_callback=self._on_device_disconnected_via_dbus
+            )
+
+            if self.debug_mode:
+                self.bluetooth_watcher.set_debug_mode(True)
+
+            await self.bluetooth_watcher.start()
+            logger.info("Bluetooth connection watcher started")
+
+        except Exception as e:
+            logger.warning(f"Failed to start Bluetooth watcher: {e}")
+            logger.info("Continuing without automatic connection detection")
+
+    async def _on_device_connected_via_dbus(self, mac_address: str):
+        """Handle device connection detected via DBus."""
+        logger.info(f"Device {mac_address} connected (detected via DBus)")
+
+        # Only handle if this is our target device or we don't have a specific target
+        if (self.config.device_address and
+            mac_address.upper() != self.config.device_address.upper()):
+            return
+
+        # If we're already connected to this device, ignore
+        if (self.connected and self.device_info and
+            self.device_info.address.upper() == mac_address.upper()):
+            return
+
+        # Try to attach to the newly connected device
+        try:
+            await self._attach_to_device_by_mac(mac_address)
+        except Exception as e:
+            logger.error(f"Failed to attach to device {mac_address}: {e}")
+
+    async def _on_device_disconnected_via_dbus(self, mac_address: str):
+        """Handle device disconnection detected via DBus."""
+        logger.info(f"Device {mac_address} disconnected (detected via DBus)")
+
+        # Only handle if this is our currently connected device
+        if (self.connected and self.device_info and
+            self.device_info.address.upper() == mac_address.upper()):
+
+            logger.info(f"Detached from device {mac_address} - returning to wait mode")
+            await self._detach_from_device()
+
+    async def _try_attach_to_existing_devices(self):
+        """Try to attach to already connected devices."""
+        try:
+            # Check if our target device is already connected
+            if self.bluetooth_watcher:
+                connected_devices = await self.bluetooth_watcher.get_connected_devices()
+
+                if self.config.device_address:
+                    # Check if our specific device is connected
+                    if self.config.device_address in connected_devices:
+                        logger.info(f"Target device {self.config.device_address} is already connected")
+                        await self._attach_to_device_by_mac(self.config.device_address)
+                        return
+                else:
+                    # Look for any Huion device that's connected
+                    for mac, device_info in connected_devices.items():
+                        if self._is_huion_device_name(device_info.get('name', '')):
+                            logger.info(f"Found connected Huion device: {mac}")
+                            await self._attach_to_device_by_mac(mac)
+                            return
+
+            # No devices are currently connected
+            logger.info("No devices currently connected - waiting for connections...")
+
+        except Exception as e:
+            logger.warning(f"Failed to check for existing devices: {e}")
+            if not self.auto_reconnect:
+                raise
+
+    async def _attach_to_device_by_mac(self, mac_address: str):
+        """Attach to an already connected device by MAC address."""
+        logger.info(f"Attaching to device {mac_address}...")
+
+        try:
+            # Create device info for the MAC address
+            self.device_info = DeviceInfo(
+                address=mac_address,
+                name=f"Huion Device ({mac_address})"
+            )
+
+            # Use the existing connection method for already connected devices
+            await self._connect_to_existing_device()
+            await self._start_notifications()
+
+            logger.info(f"Successfully attached to {mac_address}")
+
+        except Exception as e:
+            logger.error(f"Failed to attach to {mac_address}: {e}")
+            self.device_info = None
+            raise
+
+    async def _detach_from_device(self):
+        """Detach from the current device and return to wait mode."""
+        logger.info("Detaching from device...")
+
+        if self.client and self.connected:
+            try:
+                await self.client.disconnect()
+            except Exception as e:
+                logger.warning(f"Error disconnecting: {e}")
+
+        self.client = None
+        self.connected = False
+        self.device_info = None
+        self.reconnect_attempts = 0
+
+        logger.info("Detached from device - waiting for next connection")
+
+    def _is_huion_device_name(self, device_name: str) -> bool:
+        """Check if a device name matches Huion device patterns."""
+        if not device_name:
+            return False
+
+        device_name_lower = device_name.lower()
+        huion_indicators = ['huion', 'keydial']
+        return any(indicator in device_name_lower for indicator in huion_indicators)
+
+    async def _find_and_connect_device(self):
+        """Find and connect to the Huion device using normal scanning."""
+        if self.config.device_address:
+            # Use specific device address
+            logger.info(f"Looking for device: {self.config.device_address}")
+            scanner = DeviceScanner(debug_mode=self.debug_mode)
+            target = await scanner.scan_specific_device(self.config.device_address)
+
+            if not target:
+                raise RuntimeError(f"Device {self.config.device_address} not found or not paired")
+        else:
+            # Scan for available devices
+            logger.info("Searching for device...")
+            scanner = DeviceScanner(debug_mode=self.debug_mode)
+            devices = await scanner.scan()
+
+            if not devices:
+                raise RuntimeError("No Huion devices found")
+
+            # Use the first device found
+            target = devices[0]
+            logger.info(f"Using device: {target.address} - {target.name}")
+
+        # Store the discovered device info
+        self.device_info = target
+        logger.info(f"Found device: {target.address} - {target.name}")
+
+        # Connect to the device
+        await self._connect_with_retry()
+        await self._start_notifications()
 
     async def _find_device(self):
         """Find and connect to the Huion device."""
@@ -122,6 +303,10 @@ class HuionKeydialMini:
         # Store the discovered device info
         self.device_info = target
         logger.info(f"Found device: {target.address} - {target.name}")
+
+        # Connect to the device
+        await self._connect_with_retry()
+        await self._start_notifications()
 
     async def _connect_with_retry(self):
         """Connect to the device with retry logic."""

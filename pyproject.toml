@@ -31,6 +31,7 @@ dependencies = [
     "evdev>=1.6.1",
     "click>=8.1.7",
     "pyyaml>=6.0.1",
+    "dbus-next>=0.2.3",
 ]
 
 [project.optional-dependencies]

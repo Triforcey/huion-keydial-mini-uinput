@@ -75,6 +75,12 @@ class Config:
             return 3
 
     @property
+    def auto_reconnect(self) -> bool:
+        """Get whether to enable automatic reconnection via DBus monitoring."""
+        auto_reconnect = self.data.get('bluetooth', {}).get('auto_reconnect', True)
+        return bool(auto_reconnect)
+
+    @property
     def uinput_device_name(self) -> str:
         """Get the uinput device name."""
         name = self.data.get('uinput', {}).get('device_name', 'Huion Keydial Mini')
@@ -235,6 +241,7 @@ class Config:
             _ = self.scan_timeout
             _ = self.connection_timeout
             _ = self.reconnect_attempts
+            _ = self.auto_reconnect
             _ = self.uinput_device_name
             _ = self.key_mappings
             _ = self.dial_settings
@@ -253,6 +260,7 @@ class Config:
                 'scan_timeout': self.scan_timeout,
                 'connection_timeout': self.connection_timeout,
                 'reconnect_attempts': self.reconnect_attempts,
+                'auto_reconnect': self.auto_reconnect,
             },
             'uinput': {
                 'device_name': self.uinput_device_name,

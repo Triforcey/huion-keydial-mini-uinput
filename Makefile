@@ -1,4 +1,4 @@
-.PHONY: help install install-dev uninstall clean build test test-simple test-cov lint format check-deps scan run debug package-deb package-rpm package-all config-list config-bind config-unbind config-dial config-reset config-keys debug-parser debug-parser-interactive install-udev diagnose-hid
+.PHONY: help install install-dev uninstall clean build test test-simple test-cov lint format check-deps scan run debug package-deb package-rpm package-all config-list config-bind config-unbind config-dial config-reset config-keys debug-parser debug-parser-interactive install-udev diagnose-hid install-udev-user install-systemd uninstall-systemd uninstall-system
 
 PYTHON := python3
 PIP := pip3
@@ -12,6 +12,7 @@ help:
 	@echo "  install-dev   Install in development mode with dev dependencies"
 	@echo "  uninstall     Uninstall the package"
 	@echo "  install-udev  Install modprobe blacklist for device conflicts"
+	@echo "  install-udev-user  Install user udev rule for /dev/uinput (manual, user-configurable)"
 	@echo ""
 	@echo "Development:"
 	@echo "  clean         Clean build artifacts"
@@ -54,12 +55,28 @@ install-dev:
 	$(PIP) install -e .
 	$(PIP) install -e ".[test]"
 
+install-system: build-system
+	$(PYTHON) -m installer --prefix=/usr dist/*.whl
+
+build-system:
+	$(PYTHON) -m build
+
 uninstall:
 	$(PIP) uninstall -y huion-keydial-mini-driver
 
 install-udev:
 	@echo "Installing modprobe blacklist for device conflicts..."
 	sudo ./packaging/install-udev.sh
+
+install-udev-user:
+	@echo "Installing user udev rule for /dev/uinput..."
+	@echo "This rule is intended for manual installation and user configuration."
+	sudo cp packaging/udev/99-huion-keydial-mini-user.rules /etc/udev/rules.d/
+	@echo "Rule installed to /etc/udev/rules.d/99-huion-keydial-mini-user.rules"
+	@echo "Please review and edit this file as needed for your setup."
+	@echo "Reloading udev rules..."
+	sudo udevadm control --reload-rules
+	@echo "To apply immediately: sudo udevadm trigger"
 
 clean:
 	rm -rf build/
@@ -186,3 +203,20 @@ config-reset:
 
 config-keys:
 	keydialctl list-keys
+
+install-systemd:
+	install -m 644 packaging/systemd/huion-keydial-mini-uinput.service /etc/systemd/system/huion-keydial-mini-uinput.service
+	install -m 644 packaging/systemd/huion-keydial-mini-user.service /etc/systemd/system/huion-keydial-mini-user.service
+	systemctl daemon-reload
+
+uninstall-systemd:
+	rm -f /etc/systemd/system/huion-keydial-mini-uinput.service
+	rm -f /etc/systemd/system/huion-keydial-mini-user.service
+	systemctl daemon-reload
+
+uninstall-system:
+	rm -rf /usr/lib/python*/site-packages/huion_keydial_mini*
+	rm -rf /usr/lib/python*/site-packages/huion_keydial_mini_driver*
+	rm -f /usr/bin/huion-keydial-mini
+	rm -f /usr/bin/create-huion-keydial-uinput-device
+	rm -f /usr/bin/keydialctl

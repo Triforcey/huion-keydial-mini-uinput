@@ -30,7 +30,6 @@ dependencies = [
     "bleak>=0.21.1",
     "evdev>=1.6.1",
     "pyudev>=0.24.1",
-    "asyncio-mqtt>=0.13.0",
     "click>=8.1.7",
     "pyyaml>=6.0.1",
 ]
@@ -42,6 +41,10 @@ test = [
     "pytest-cov>=4.0.0",
     "pytest-mock>=3.10.0",
 ]
+dev = [
+    "build",
+    "installer"
+]
 
 [project.urls]
 "Homepage" = "https://github.com/your-username/huion-keydial-mini-uinput"
@@ -51,6 +54,7 @@ test = [
 [project.scripts]
 huion-keydial-mini = "huion_keydial_mini.main:main"
 keydialctl = "huion_keydial_mini.keydialctl:cli"
+create-huion-keydial-uinput-device = "huion_keydial_mini.create_uinput_device:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]

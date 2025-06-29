@@ -21,6 +21,7 @@ setup(
         "console_scripts": [
             "huion-keydial-mini=huion_keydial_mini.main:main",
             "keydialctl=huion_keydial_mini.keydialctl:cli",
+            "create-huion-keydial-uinput-device=huion_keydial_mini.create_uinput_device:cli",
         ],
     },
     classifiers=[

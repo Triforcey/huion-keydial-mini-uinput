@@ -61,9 +61,6 @@ class HuionKeydialMini:
             # Find the device
             await self._find_device()
 
-            # Create uinput device
-            await self.uinput_handler.create_device()
-
             # Connect to the device
             await self._connect_with_retry()
 
@@ -91,7 +88,7 @@ class HuionKeydialMini:
                 logger.warning(f"Error disconnecting: {e}")
 
         if self.uinput_handler:
-            await self.uinput_handler.destroy_device()
+            pass
 
         if self.keybind_manager:
             await self.keybind_manager.stop_socket_server()
@@ -312,9 +309,6 @@ class HuionKeydialMini:
             # Initialize components
             self.uinput_handler = UInputHandler(self.config)
             self.hid_parser = HIDParser(self.config)
-
-            # Create uinput device
-            await self.uinput_handler.create_device()
 
             # Connect to the already connected device
             await self._connect_to_existing_device()

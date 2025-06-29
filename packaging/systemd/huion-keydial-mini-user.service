@@ -1,13 +1,13 @@
 [Unit]
-Description=Huion Keydial Mini Driver (User Service)
-After=bluetooth.target
-Wants=bluetooth.target
+Description=Huion Keydial Mini User Service
+After=huion-keydial-mini-uinput.service
+Requires=huion-keydial-mini-uinput.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/huion-keydial-mini
-Restart=always
-RestartSec=5
+ExecStart=/usr/bin/huion-keydial-mini
+Restart=on-failure
+User=%i
 
 # User service - no need for root
 # Security settings for user service

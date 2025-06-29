@@ -1,8 +1,17 @@
 # Huion Keydial Mini - User access to uinput
 # This rule allows users to create virtual input devices
+#
+# Installation: This rule is intended for manual installation. Users should configure access to /dev/uinput as needed for their setup.
+# The recommended way is to use the 'uaccess' tag, which allows the active local user session to access uinput.
 
-# Allow users in the 'input' group to access uinput
-KERNEL=="uinput", MODE="0666", GROUP="input"
+# Allow active local user session access to uinput
+KERNEL=="uinput", TAG+="uaccess"
+
+# Alternative: Allow users in the 'input' group to access uinput (uncomment if needed)
+# KERNEL=="uinput", MODE="0660", GROUP="input"
 
 # Alternative: Allow specific user (replace 'username' with actual username)
 # KERNEL=="uinput", MODE="0666", OWNER="username"
+
+KERNEL=="event*", SUBSYSTEM=="input", ATTRS{name}=="Huion Keydial Mini", TAG+="uaccess"
+KERNEL=="event*", SUBSYSTEM=="input" ATTRS{name}=="Huion Keydial Mini", ENV{ID_INPUT_TABLET}="0"

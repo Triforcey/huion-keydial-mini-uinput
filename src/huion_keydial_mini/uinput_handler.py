@@ -102,12 +102,22 @@ class UInputHandler:
         self.keybind_manager = keybind_manager
         self.device: Optional[UInput] = None
         self.capabilities = self._build_capabilities()
+        self._try_open_device()
+
+    def _try_open_device(self):
+        """Try to open the existing uinput device."""
+        try:
+            self.device = UInput(events=self.capabilities, name=self.config.uinput_device_name)
+        except Exception as e:
+            logger.warning(f"Could not open uinput device '{self.config.uinput_device_name}': {e}")
+            self.device = None
 
     def _build_capabilities(self) -> Dict:
         """Build device capabilities based on configuration and keybind manager."""
         capabilities = {
             evdev.ecodes.EV_KEY: [],
-            evdev.ecodes.EV_REL: [evdev.ecodes.REL_X, evdev.ecodes.REL_Y, evdev.ecodes.REL_WHEEL],
+            # Remove mouse and relative events for pure keyboard emulation
+            # evdev.ecodes.EV_REL: [evdev.ecodes.REL_X, evdev.ecodes.REL_Y, evdev.ecodes.REL_WHEEL],
             evdev.ecodes.EV_ABS: [],
         }
 
@@ -127,37 +137,6 @@ class UInputHandler:
                             capabilities[evdev.ecodes.EV_KEY].append(key_code)
 
         return capabilities
-
-    async def create_device(self):
-        """Create the virtual input device."""
-        logger.info("Creating virtual input device...")
-
-        try:
-            self.device = UInput(
-                events=self.capabilities,
-                name=self.config.uinput_device_name,
-                vendor=0x256c,  # Huion vendor ID
-                product=0x006d,  # Generic product ID
-                version=0x0001,
-            )
-
-            logger.info(f"Created virtual device: {self.config.uinput_device_name}")
-            logger.debug(f"Device capabilities: {self.capabilities}")
-
-        except Exception as e:
-            logger.error(f"Failed to create virtual device: {e}")
-            raise
-
-    async def destroy_device(self):
-        """Destroy the virtual input device."""
-        if self.device:
-            logger.info("Destroying virtual input device...")
-            try:
-                self.device.close()
-                self.device = None
-                logger.info("Virtual device destroyed")
-            except Exception as e:
-                logger.warning(f"Error destroying device: {e}")
 
     async def send_event(self, event: InputEvent):
         """Send an input event to the virtual device."""

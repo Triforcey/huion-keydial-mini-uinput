@@ -64,11 +64,11 @@ class TestHIDParser:
         events = hid_parser.parse(hid_test_data.MULTIPLE_BUTTONS)
 
         assert len(events) == 2
-        button_13_event = next(e for e in events if e.key_code == "BUTTON_13")
-        button_15_event = next(e for e in events if e.key_code == "BUTTON_15")
+        BUTTON_13_event = next(e for e in events if e.key_code == "BUTTON_13")
+        BUTTON_15_event = next(e for e in events if e.key_code == "BUTTON_15")
 
-        assert button_13_event.event_type == EventType.KEY_PRESS
-        assert button_15_event.event_type == EventType.KEY_PRESS
+        assert BUTTON_13_event.event_type == EventType.KEY_PRESS
+        assert BUTTON_15_event.event_type == EventType.KEY_PRESS
 
     @pytest.mark.hid_parser
     def test_parse_dial_clockwise(self, hid_parser, hid_test_data):

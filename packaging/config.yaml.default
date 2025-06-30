@@ -6,27 +6,27 @@ device_address: null  # Will auto-discover if not set
 
 # Key mappings (will be loaded into memory)
 # Format: button_name: "KEY_NAME" or "KEY_MODIFIER+KEY_NAME"
-# Available buttons: button_1, button_2, button_3, button_4, button_5, button_6, button_7, button_8
+# Available buttons: BUTTON_1, BUTTON_2, BUTTON_3, BUTTON_4, BUTTON_5, BUTTON_6, BUTTON_7, BUTTON_8
 # Examples:
-#   button_1: "KEY_F1"                    # Single key
-#   button_2: "KEY_LEFTCTRL+KEY_C"        # Key combination
-#   button_3: "KEY_VOLUMEUP"              # Media key
+#   BUTTON_1: "KEY_F1"                    # Single key
+#   BUTTON_2: "KEY_LEFTCTRL+KEY_C"        # Key combination
+#   BUTTON_3: "KEY_VOLUMEUP"              # Media key
 key_mappings:
-  # button_1: "KEY_F1"
-  # button_2: "KEY_LEFTCTRL+KEY_C"
-  # button_3: "KEY_VOLUMEUP"
-  # button_4: "KEY_VOLUMEDOWN"
-  # button_5: "KEY_MUTE"
-  # button_6: "KEY_PLAYPAUSE"
-  # button_7: "KEY_ENTER"
-  # button_8: "KEY_ESC"
+  # BUTTON_1: "KEY_F1"
+  # BUTTON_2: "KEY_LEFTCTRL+KEY_C"
+  # BUTTON_3: "KEY_VOLUMEUP"
+  # BUTTON_4: "KEY_VOLUMEDOWN"
+  # BUTTON_5: "KEY_MUTE"
+  # BUTTON_6: "KEY_PLAYPAUSE"
+  # BUTTON_7: "KEY_ENTER"
+  # BUTTON_8: "KEY_ESC"
 
 # Dial settings
 dial_settings:
-  clockwise_key: "KEY_VOLUMEUP"      # Key to send when dial is turned clockwise
-  counterclockwise_key: "KEY_VOLUMEDOWN"  # Key to send when dial is turned counterclockwise
-  click_key: "KEY_MUTE"              # Key to send when dial is clicked
-  sensitivity: 1.0                   # Dial sensitivity (1.0 = normal, 2.0 = double, 0.5 = half)
+  DIAL_CW: "KEY_VOLUMEUP"      # Send volume up when dial is turned clockwise
+  DIAL_CCW: "KEY_VOLUMEDOWN"   # Send volume down when dial is turned counterclockwise
+  DIAL_CLICK: "KEY_MUTE"       # Send mute when dial is clicked
+  sensitivity: 1.0             # Dial sensitivity (1.0 = normal, 2.0 = double, 0.5 = half)
 
 # UInput device settings
 uinput_device_name: "Huion Keydial Mini"

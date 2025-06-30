@@ -87,25 +87,25 @@ class KeybindManager:
 
         # Load dial settings
         dial_settings = self.config.dial_settings
-        if dial_settings.get('clockwise_key'):
-            self.keybind_map['dial_clockwise'] = KeybindAction(
+        if dial_settings.get('DIAL_CW'):
+            self.keybind_map['DIAL_CW'] = KeybindAction(
                 type=EventType.KEYBOARD,
-                keys=[dial_settings['clockwise_key']],
-                description="Dial clockwise -> " + dial_settings['clockwise_key']
+                keys=[dial_settings['DIAL_CW']],
+                description="Dial clockwise -> " + dial_settings['DIAL_CW']
             )
 
-        if dial_settings.get('counterclockwise_key'):
-            self.keybind_map['dial_counterclockwise'] = KeybindAction(
+        if dial_settings.get('DIAL_CCW'):
+            self.keybind_map['DIAL_CCW'] = KeybindAction(
                 type=EventType.KEYBOARD,
-                keys=[dial_settings['counterclockwise_key']],
-                description="Dial counterclockwise -> " + dial_settings['counterclockwise_key']
+                keys=[dial_settings['DIAL_CCW']],
+                description="Dial counterclockwise -> " + dial_settings['DIAL_CCW']
             )
 
-        if dial_settings.get('click_key'):
-            self.keybind_map['dial_click'] = KeybindAction(
+        if dial_settings.get('DIAL_CLICK'):
+            self.keybind_map['DIAL_CLICK'] = KeybindAction(
                 type=EventType.KEYBOARD,
-                keys=[dial_settings['click_key']],
-                description="Dial click -> " + dial_settings['click_key']
+                keys=[dial_settings['DIAL_CLICK']],
+                description="Dial click -> " + dial_settings['DIAL_CLICK']
             )
 
         logger.info(f"Loaded {len(self.keybind_map)} initial keybindings")

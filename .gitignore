@@ -148,10 +148,12 @@ config.yaml
 *.AppImage
 *.tar.gz
 *.tar.bz2
+*.pkg.tar.zst
 
 # Temporary build directories
 rpmbuild/
 *.AppDir/
+packaging/arch/build/
 
 # Logs
 *.log

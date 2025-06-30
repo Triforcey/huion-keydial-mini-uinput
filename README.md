@@ -86,10 +86,10 @@ The `keydialctl` command now communicates with the running service via Unix sock
 keydialctl list-bindings
 
 # Bind button 1 to F1 key
-keydialctl bind button_1 keyboard KEY_F1
+keydialctl bind BUTTON_1 keyboard KEY_F1
 
 # Bind button 2 to Ctrl+C combo
-keydialctl bind button_2 keyboard KEY_LEFTCTRL+KEY_C
+keydialctl bind BUTTON_2 keyboard KEY_LEFTCTRL+KEY_C
 
 # Bind dial clockwise to mouse scroll
 keydialctl bind dial_clockwise mouse scroll
@@ -98,7 +98,7 @@ keydialctl bind dial_clockwise mouse scroll
 keydialctl bind dial_click mouse left_click
 
 # Remove a binding
-keydialctl unbind button_1
+keydialctl unbind BUTTON_1
 ```
 
 ### Supported Action Types

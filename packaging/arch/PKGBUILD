@@ -1,0 +1,104 @@
+# Maintainer: JD Flamm <judsonwebdesign@gmail.com>
+pkgname=huion-keydial-mini-driver
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="User space driver for Huion Keydial Mini bluetooth device"
+arch=('any')
+url="https://github.com/Triforcey/huion-keydial-mini-uinput"
+license=('MIT')
+depends=(
+    'python>=3.8'
+    'python-evdev'
+    'python-bleak'
+    'python-click'
+    'python-pyyaml'
+    'python-dbus-next'
+    'systemd'
+    'bluez'
+)
+makedepends=(
+    'python-build'
+    'python-installer'
+    'python-wheel'
+    'python-setuptools'
+)
+provides=('huion-keydial-mini')
+conflicts=('huion-keydial-mini')
+source=()
+sha256sums=()
+options=(!strip !debug)
+
+
+prepare() {
+    # Use PROJECT_ROOT env variable if set, otherwise default to $PWD/../..
+    PROJECT_ROOT="${PROJECT_ROOT:-$PWD/../..}"
+    cp -r "$PROJECT_ROOT/src" "$srcdir/"
+    cp "$PROJECT_ROOT/pyproject.toml" "$srcdir/"
+    cp "$PROJECT_ROOT/README.md" "$srcdir/"
+    cp "$PROJECT_ROOT/LICENSE" "$srcdir/"
+}
+
+build() {
+    cd "$srcdir"
+    python -m build --wheel --no-isolation
+}
+
+package() {
+    cd "$srcdir"
+    python -m installer --destdir="$pkgdir" dist/*.whl
+    PROJECT_ROOT="${PROJECT_ROOT:-$PWD/../..}"
+    install -Dm644 "$PROJECT_ROOT/packaging/systemd/huion-keydial-mini-uinput.service" \
+        "$pkgdir/usr/lib/systemd/system/huion-keydial-mini-uinput.service"
+    install -Dm644 "$PROJECT_ROOT/packaging/systemd/huion-keydial-mini-user.service" \
+        "$pkgdir/usr/lib/systemd/user/huion-keydial-mini-user.service"
+    install -Dm644 "$PROJECT_ROOT/packaging/udev/99-huion-keydial-mini.rules" \
+        "$pkgdir/usr/lib/udev/rules.d/99-huion-keydial-mini.rules"
+    install -Dm755 "$PROJECT_ROOT/packaging/udev/unbind-huion.sh" \
+        "$pkgdir/usr/local/bin/unbind-huion.sh"
+    install -Dm644 "$PROJECT_ROOT/packaging/config.yaml.default" \
+        "$pkgdir/etc/huion-keydial-mini/config.yaml"
+    install -Dm644 "$PROJECT_ROOT/README.md" \
+        "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 "$PROJECT_ROOT/LICENSE" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm755 /dev/stdin "$pkgdir/usr/lib/systemd/system-preset/99-huion-keydial-mini.preset" << 'EOF'
+# Enable huion-keydial-mini-uinput service
+enable huion-keydial-mini-uinput.service
+EOF
+}
+
+post_install() {
+    echo "Huion Keydial Mini Driver installed successfully!"
+    echo ""
+    echo "Next steps:"
+    echo "1. Add your user to the input group:"
+    echo "   sudo usermod -a -G input \$USER"
+    echo "2. Copy the default config to your user directory:"
+    echo "   mkdir -p ~/.config/huion-keydial-mini"
+    echo "   cp /etc/huion-keydial-mini/config.yaml ~/.config/huion-keydial-mini/"
+    echo "3. Edit your config file:"
+    echo "   nano ~/.config/huion-keydial-mini/config.yaml"
+    echo "4. Reboot or log out and back in for group changes to take effect"
+    echo "5. Start the user service:"
+    echo "   systemctl --user enable --now huion-keydial-mini-user.service"
+    echo ""
+    echo "For more information, see: /usr/share/doc/$pkgname/README.md"
+}
+
+post_upgrade() {
+    echo "Huion Keydial Mini Driver upgraded successfully!"
+    echo "The system service will be restarted automatically."
+    echo "You may need to restart the user service:"
+    echo "  systemctl --user restart huion-keydial-mini-user.service"
+}
+
+post_remove() {
+    echo "Huion Keydial Mini Driver removed."
+    echo "You may want to:"
+    echo "1. Remove your user from the input group:"
+    echo "   sudo gpasswd -d \$USER input"
+    echo "2. Remove your config files:"
+    echo "   rm -rf ~/.config/huion-keydial-mini"
+    echo "3. Remove any remaining log files:"
+    echo "   journalctl --vacuum-time=1s"
+}

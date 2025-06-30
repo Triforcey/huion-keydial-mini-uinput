@@ -57,8 +57,8 @@ def scan(ctx):
 
 @cli.command()
 @click.argument('action_id', type=click.Choice([
-    'button_1', 'button_2', 'button_3', 'button_4',
-    'button_5', 'button_6', 'button_7', 'button_8',
+    'BUTTON_1', 'BUTTON_2', 'BUTTON_3', 'BUTTON_4',
+    'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8',
     'dial_clockwise', 'dial_counterclockwise', 'dial_click'
 ]))
 @click.argument('action_type', type=click.Choice(['keyboard', 'mouse', 'combo']))
@@ -67,7 +67,7 @@ def scan(ctx):
 def bind(ctx, action_id: str, action_type: str, action_data: str):
     """Bind an action to a key or mouse event.
 
-    ACTION_ID: Action identifier (button_1-8, dial_clockwise, etc.)
+    ACTION_ID: Action identifier (BUTTON_1-8, dial_clockwise, etc.)
     ACTION_TYPE: Type of action (keyboard, mouse, combo)
     ACTION_DATA: Action data (e.g., "KEY_F1", "KEY_CTRL+KEY_C", "scroll", "left_click")
     """
@@ -128,15 +128,15 @@ def bind(ctx, action_id: str, action_type: str, action_data: str):
 
 @cli.command()
 @click.argument('action_id', type=click.Choice([
-    'button_1', 'button_2', 'button_3', 'button_4',
-    'button_5', 'button_6', 'button_7', 'button_8',
+    'BUTTON_1', 'BUTTON_2', 'BUTTON_3', 'BUTTON_4',
+    'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8',
     'dial_clockwise', 'dial_counterclockwise', 'dial_click'
 ]))
 @click.pass_context
 def unbind(ctx, action_id: str):
     """Remove binding for an action.
 
-    ACTION_ID: Action identifier (button_1-8, dial_clockwise, etc.)
+    ACTION_ID: Action identifier (BUTTON_1-8, dial_clockwise, etc.)
     """
     async def do_unbind():
         socket_path = get_socket_path()
@@ -205,8 +205,8 @@ def list_bindings(ctx):
             config = _load_config(config_path)
 
             # Show button mappings
-            for button in ['button_1', 'button_2', 'button_3', 'button_4',
-                          'button_5', 'button_6', 'button_7', 'button_8']:
+            for button in ['BUTTON_1', 'BUTTON_2', 'BUTTON_3', 'BUTTON_4',
+                          'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8']:
                 key = config.key_mappings.get(button, 'unbound')
                 click.echo(f"  {button}: {key}")
 

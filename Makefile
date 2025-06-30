@@ -1,4 +1,4 @@
-.PHONY: help install install-dev install-system install-all install-udev install-udev-system install-systemd install-config uninstall clean build test test-simple test-cov lint format check-deps scan run debug package-deb package-rpm package-all config-list config-bind config-unbind config-dial config-reset config-keys debug-parser debug-parser-interactive install-udev diagnose-hid install-systemd uninstall-systemd uninstall-system uninstall-udev uninstall-config check-permissions fix-permissions uninstall-all
+.PHONY: help install install-dev install-system install-all install-udev install-udev-system install-systemd install-config uninstall clean build test test-simple test-cov lint format check-deps scan run debug package-deb package-rpm package-arch package-all config-list config-bind config-unbind config-dial config-reset config-keys debug-parser debug-parser-interactive install-udev diagnose-hid install-systemd uninstall-systemd uninstall-system uninstall-udev uninstall-config check-permissions fix-permissions uninstall-all
 
 PYTHON := python3
 PIP := pip3
@@ -57,12 +57,13 @@ help:
 	@echo "Packaging:"
 	@echo "  package-deb   Build DEB package"
 	@echo "  package-rpm   Build RPM package"
+	@echo "  package-arch  Build Arch Linux package"
 	@echo "  package-all   Build all packages"
 	@echo ""
 	@echo "Configuration:"
 	@echo "  config-list   List current key bindings"
-	@echo "  config-bind   Bind a button to a key (use BUTTON=button_1 KEY=KEY_F1)"
-	@echo "  config-unbind Unbind a button (use BUTTON=button_1)"
+	@echo "  config-bind   Bind a button to a key (use BUTTON=BUTTON_1 KEY=KEY_F1)"
+	@echo "  config-unbind Unbind a button (use BUTTON=BUTTON_1)"
 	@echo "  config-dial   Configure dial settings"
 	@echo "  config-keys   List available key codes"
 	@echo "  config-reset  Reset configuration to defaults"
@@ -184,8 +185,12 @@ package-deb:
 package-rpm:
 	./packaging/build.sh
 
+package-arch:
+	./packaging/arch/build.sh
+
 package-all:
 	./packaging/build.sh
+	./packaging/arch/build.sh
 
 # Virtual environment management
 venv:
@@ -205,16 +210,16 @@ config-list:
 
 config-bind:
 	@if [ -z "$(BUTTON)" ] || [ -z "$(KEY)" ]; then \
-		echo "Usage: make config-bind BUTTON=button_1 KEY=KEY_F1"; \
-		echo "Available buttons: button_1 through button_8"; \
+		echo "Usage: make config-bind BUTTON=BUTTON_1 KEY=KEY_F1"; \
+		echo "Available buttons: BUTTON_1 through BUTTON_8"; \
 		exit 1; \
 	fi
 	keydialctl bind $(BUTTON) $(KEY)
 
 config-unbind:
 	@if [ -z "$(BUTTON)" ]; then \
-		echo "Usage: make config-unbind BUTTON=button_1"; \
-		echo "Available buttons: button_1 through button_8"; \
+		echo "Usage: make config-unbind BUTTON=BUTTON_1"; \
+		echo "Available buttons: BUTTON_1 through BUTTON_8"; \
 		exit 1; \
 	fi
 	keydialctl unbind $(BUTTON)

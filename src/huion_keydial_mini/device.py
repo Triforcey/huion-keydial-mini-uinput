@@ -12,7 +12,6 @@ from bleak.backends.characteristic import BleakGATTCharacteristic
 from .config import Config
 from .uinput_handler import UInputHandler
 from .hid_parser import HIDParser
-from .scanner import DeviceScanner, DiscoveredDevice
 from .keybind_manager import KeybindManager
 from .bluetooth_watcher import BluetoothWatcher
 
@@ -44,7 +43,7 @@ class HuionKeydialMini:
     def __init__(self, config: Config):
         self.config = config
         self.device: Optional[BLEDevice] = None
-        self.device_info: Optional[Union[DeviceInfo, DiscoveredDevice]] = None
+        self.device_info: Optional[DeviceInfo] = None
         self.client: Optional[BleakClient] = None
         self.connected = False
         self.running = False
@@ -209,8 +208,8 @@ class HuionKeydialMini:
                 name=f"Huion Device ({mac_address})"
             )
 
-            # Use the existing connection method for already connected devices
-            await self._connect_to_existing_device()
+            # Connect to the device using regular connection method
+            await self._connect_with_retry()
             await self._start_notifications()
 
             logger.info(f"Successfully attached to {mac_address}")
@@ -245,68 +244,6 @@ class HuionKeydialMini:
         device_name_lower = device_name.lower()
         huion_indicators = ['huion', 'keydial']
         return any(indicator in device_name_lower for indicator in huion_indicators)
-
-    async def _find_and_connect_device(self):
-        """Find and connect to the Huion device using normal scanning."""
-        if self.config.device_address:
-            # Use specific device address
-            logger.info(f"Looking for device: {self.config.device_address}")
-            scanner = DeviceScanner(debug_mode=self.debug_mode)
-            target = await scanner.scan_specific_device(self.config.device_address)
-
-            if not target:
-                raise RuntimeError(f"Device {self.config.device_address} not found or not paired")
-        else:
-            # Scan for available devices
-            logger.info("Searching for device...")
-            scanner = DeviceScanner(debug_mode=self.debug_mode)
-            devices = await scanner.scan()
-
-            if not devices:
-                raise RuntimeError("No Huion devices found")
-
-            # Use the first device found
-            target = devices[0]
-            logger.info(f"Using device: {target.address} - {target.name}")
-
-        # Store the discovered device info
-        self.device_info = target
-        logger.info(f"Found device: {target.address} - {target.name}")
-
-        # Connect to the device
-        await self._connect_with_retry()
-        await self._start_notifications()
-
-    async def _find_device(self):
-        """Find and connect to the Huion device."""
-        if self.config.device_address:
-            # Use specific device address
-            logger.info(f"Looking for device: {self.config.device_address}")
-            scanner = DeviceScanner(debug_mode=self.debug_mode)
-            target = await scanner.scan_specific_device(self.config.device_address)
-
-            if not target:
-                raise RuntimeError(f"Device {self.config.device_address} not found or not paired")
-        else:
-            # Scan for available devices
-            logger.info("Searching for device...")
-            scanner = DeviceScanner(debug_mode=self.debug_mode)
-            devices = await scanner.scan()
-
-            if not devices:
-                raise RuntimeError("No Huion devices found")
-
-            # Use the first device found
-            target = devices[0]
-            logger.info(f"Using device: {target.address} - {target.name}")
-
-        # Store the discovered device info
-        self.device_info = target
-        logger.info(f"Found device: {target.address} - {target.name}")
-
-        # Connect to the device
-        await self._connect_with_retry()
-        await self._start_notifications()
 
     async def _connect_with_retry(self):
         """Connect to the device with retry logic."""
@@ -482,70 +419,3 @@ class HuionKeydialMini:
 
         await self._connect_with_retry()
         await self._start_notifications()
-
-    async def start_with_existing_connection(self):
-        """Start the device driver assuming the device is already connected."""
-        logger.info("Starting Huion Keydial Mini driver with existing connection...")
-
-        try:
-            # Find the device
-            await self._find_device()
-
-            # Initialize components
-            self.uinput_handler = UInputHandler(self.config)
-            self.hid_parser = HIDParser(self.config)
-
-            # Connect to the already connected device
-            await self._connect_to_existing_device()
-
-            # Start listening for data
-            await self._start_notifications()
-
-            self.running = True
-            logger.info("Driver started successfully with existing connection")
-
-        except Exception as e:
-            logger.error(f"Failed to start driver: {e}")
-            await self.stop()
-            raise
-
-    async def _connect_to_existing_device(self):
-        """Connect to a device that's already connected via bluetoothctl."""
-        if not self.device_info:
-            raise RuntimeError("No device to connect to")
-
-        logger.info(f"Connecting to already connected device: {self.device_info.address}...")
-
-        # For already connected devices, we need to use a different approach
-        # Try to connect with a shorter timeout and different strategy
-        self.client = BleakClient(
-            self.device_info.address,
-            timeout=5.0  # Shorter timeout for already connected devices
-        )
-
-        try:
-            # Try to connect - this might fail if device is already connected at system level
-            await self.client.connect()
-            self.connected = True
-            logger.info("Connected successfully to existing device")
-
-            # Log available services and characteristics
-            await self._log_services()
-
-        except Exception as e:
-            logger.warning(f"Direct connection failed: {e}")
-            logger.info("Trying alternative connection method...")
-
-            # Try alternative approach - create client without connecting
-            # and try to discover services directly
-            try:
-                self.client = BleakClient(self.device_info.address)
-                # Don't call connect() - just try to access services
-                await self.client.connect(timeout=2.0)
-                self.connected = True
-                logger.info("Connected using alternative method")
-                await self._log_services()
-            except Exception as e2:
-                logger.error(f"Alternative connection also failed: {e2}")
-                self.connected = False
-                raise RuntimeError(f"Could not connect to already connected device: {e2}")

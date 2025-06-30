@@ -10,7 +10,6 @@ import click
 import yaml
 
 from .config import Config
-from .scanner import DeviceScanner
 from .uinput_handler import UInputHandler
 from .keybind_manager import send_command, KeybindAction, EventType
 
@@ -36,30 +35,10 @@ def cli(ctx, config: Optional[str]):
 
 
 @cli.command()
-@click.pass_context
-def scan(ctx):
-    """Scan for available Huion devices."""
-    click.echo("Scanning for Huion devices...")
-
-    async def do_scan():
-        scanner = DeviceScanner()
-        devices = await scanner.scan()
-
-        if devices:
-            click.echo("Found devices:")
-            for device in devices:
-                click.echo(f"  {device.address} - {device.name} (RSSI: {device.rssi})")
-        else:
-            click.echo("No Huion devices found")
-
-    asyncio.run(do_scan())
-
-
-@cli.command()
 @click.argument('action_id', type=click.Choice([
     'BUTTON_1', 'BUTTON_2', 'BUTTON_3', 'BUTTON_4',
     'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8',
-    'dial_clockwise', 'dial_counterclockwise', 'dial_click'
+    'DIAL_CW', 'DIAL_CCW', 'DIAL_CLICK'
 ]))
 @click.argument('action_type', type=click.Choice(['keyboard', 'mouse', 'combo']))
 @click.argument('action_data')
@@ -130,7 +109,7 @@ def bind(ctx, action_id: str, action_type: str, action_data: str):
 @click.argument('action_id', type=click.Choice([
     'BUTTON_1', 'BUTTON_2', 'BUTTON_3', 'BUTTON_4',
     'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8',
-    'dial_clockwise', 'dial_counterclockwise', 'dial_click'
+    'DIAL_CW', 'DIAL_CCW', 'DIAL_CLICK'
 ]))
 @click.pass_context
 def unbind(ctx, action_id: str):

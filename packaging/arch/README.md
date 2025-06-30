@@ -92,10 +92,18 @@ nano ~/.config/huion-keydial-mini/config.yaml
 systemctl --user enable --now huion-keydial-mini-user.service
 ```
 
+## How It Works
+
+The driver uses automatic connection detection via DBus monitoring:
+
+- **Start the service early**: You can start the service at boot time, even before the device is connected
+- **Automatic attachment**: When you pair/connect your Keydial Mini via `bluetoothctl`, GNOME settings, or any other method, the driver will automatically detect and attach to it
+- **No manual intervention**: No need to restart the service when connecting/disconnecting the device
+
 ## Package Information
 
 - **Package Name**: `huion-keydial-mini-driver`
-- **Version**: 0.1.0
+- **Version**: 1.0.0
 - **Architecture**: Any (Python package)
 - **License**: MIT
 
@@ -132,6 +140,26 @@ pacman -Qi huion-keydial-mini-driver
 2. Check the package contents:
 ```bash
 tar -tvf *.pkg.tar.zst
+```
+
+### Service Issues
+
+If the service doesn't work:
+
+1. Check service status:
+```bash
+systemctl --user status huion-keydial-mini-user.service
+```
+
+2. Check logs:
+```bash
+journalctl --user -u huion-keydial-mini-user.service -f
+```
+
+3. Verify uinput access:
+```bash
+ls -la /dev/uinput
+groups $USER  # Should include 'input'
 ```
 
 ## Contributing

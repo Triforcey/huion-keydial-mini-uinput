@@ -10,12 +10,27 @@ A Linux driver for the Huion Keydial Mini device that provides HID over GATT sup
 - **User-level systemd service** (no root required)
 - **Advanced event types**: keyboard, mouse, and combo actions
 - **Real-time configuration** without service restart
+- **Automatic device detection** via DBus monitoring
 
 ## Architecture
 
-### New Runtime Keybind Management
+### Automatic Connection Detection
 
-The driver now uses an in-memory keybind manager with Unix socket control interface:
+The driver uses DBus monitoring to automatically detect when your Huion Keydial Mini connects or disconnects:
+
+```
+DBus Monitoring → Device Connection Event → Automatic Attachment → HID Processing → Virtual Input
+```
+
+**Key Features:**
+- **Start early**: Service can start at boot time, even before device connection
+- **Automatic attachment**: Detects device connections via BlueZ DBus signals
+- **No manual intervention**: No need to restart service when connecting/disconnecting
+- **Multiple device support**: Can target specific devices or auto-discover any Huion device
+
+### Runtime Keybind Management
+
+The driver uses an in-memory keybind manager with Unix socket control interface:
 
 ```
 HID Parser → Event → In-Memory Keybind Map → UInput Handler → Virtual Device
@@ -36,19 +51,30 @@ The driver runs as a user-level systemd service, providing:
 
 ## Installation
 
-### User-Level Service Installation
+### Quick Installation
 
 ```bash
-# Run the user installation script
-./packaging/install-user.sh
-```
+# Clone the repository
+git clone https://github.com/Triforcey/huion-keydial-mini-uinput.git
+cd huion-keydial-mini-uinput
 
-This script will:
-1. Create necessary directories
-2. Install the systemd user service
-3. Set up udev rules for uinput access
-4. Add user to the input group
-5. Enable and start the service
+# Install dependencies and build
+make install-dev
+
+# Install system components
+sudo make install-all
+
+# Add user to input group
+sudo usermod -a -G input $USER
+
+# Copy and edit configuration
+mkdir -p ~/.config/huion-keydial-mini
+cp packaging/config.yaml.default ~/.config/huion-keydial-mini/config.yaml
+nano ~/.config/huion-keydial-mini/config.yaml
+
+# Start the service
+systemctl --user enable --now huion-keydial-mini-user.service
+```
 
 ### Manual Installation
 
@@ -56,7 +82,7 @@ If you prefer manual installation:
 
 1. **Install udev rules** (requires sudo):
    ```bash
-   sudo cp packaging/udev/99-huion-keydial-mini-user.rules /etc/udev/rules.d/
+   sudo cp packaging/udev/99-huion-keydial-mini.rules /etc/udev/rules.d/
    sudo udevadm control --reload-rules
    sudo udevadm trigger
    ```
@@ -70,16 +96,31 @@ If you prefer manual installation:
 3. **Install systemd user service**:
    ```bash
    mkdir -p ~/.config/systemd/user
-   cp packaging/systemd/huion-keydial-mini-user.service ~/.config/systemd/user/huion-keydial-mini.service
-   systemctl --user enable huion-keydial-mini.service
-   systemctl --user start huion-keydial-mini.service
+   cp packaging/systemd/huion-keydial-mini-user.service ~/.config/systemd/user/
+   systemctl --user enable huion-keydial-mini-user.service
+   systemctl --user start huion-keydial-mini-user.service
    ```
 
 ## Usage
 
+### Automatic Connection Detection
+
+The driver automatically detects device connections via DBus monitoring:
+
+```bash
+# Start the service
+systemctl --user start huion-keydial-mini-user.service
+
+# Connect your device via bluetoothctl or system settings
+bluetoothctl connect AA:BB:CC:DD:EE:FF
+
+# The driver automatically detects and attaches to the device
+journalctl --user -u huion-keydial-mini-user.service -f
+```
+
 ### Runtime Keybind Management
 
-The `keydialctl` command now communicates with the running service via Unix socket:
+The `keydialctl` command communicates with the running service via Unix socket:
 
 ```bash
 # List current bindings
@@ -91,11 +132,11 @@ keydialctl bind BUTTON_1 keyboard KEY_F1
 # Bind button 2 to Ctrl+C combo
 keydialctl bind BUTTON_2 keyboard KEY_LEFTCTRL+KEY_C
 
-# Bind dial clockwise to mouse scroll
-keydialctl bind dial_clockwise mouse scroll
+# Bind dial clockwise to volume up
+keydialctl bind DIAL_CW keyboard KEY_VOLUMEUP
 
-# Bind dial click to left mouse click
-keydialctl bind dial_click mouse left_click
+# Bind dial click to mute
+keydialctl bind DIAL_CLICK keyboard KEY_MUTE
 
 # Remove a binding
 keydialctl unbind BUTTON_1
@@ -119,61 +160,26 @@ keydialctl unbind BUTTON_1
 
 ```bash
 # Check service status
-systemctl --user status huion-keydial-mini.service
+systemctl --user status huion-keydial-mini-user.service
 
 # Restart service
-systemctl --user restart huion-keydial-mini.service
+systemctl --user restart huion-keydial-mini-user.service
 
 # Stop service
-systemctl --user stop huion-keydial-mini.service
+systemctl --user stop huion-keydial-mini-user.service
 
 # View logs
-journalctl --user -u huion-keydial-mini.service -f
+journalctl --user -u huion-keydial-mini-user.service -f
 ```
 
-### Device Discovery
+### Device Configuration
 
 ```bash
-# Scan for available devices
-huion-keydial-mini --scan
-
 # Set specific device address
 keydialctl set-device AA:BB:CC:DD:EE:FF
 
 # Clear device address (auto-discover)
 keydialctl clear-device
-```
-
-### Automatic Connection Detection
-
-The driver now supports automatic detection of device connections via DBus monitoring. This means:
-
-- **Start the service early**: You can start the service at boot time, even before the device is connected
-- **Automatic attachment**: When you pair/connect your Keydial Mini via `bluetoothctl`, GNOME settings, or any other method, the driver will automatically detect and attach to it
-- **No manual intervention**: No need to restart the service when connecting/disconnecting the device
-
-**How it works:**
-- The driver monitors BlueZ DBus signals for device connection events
-- When a Huion device connects, the driver automatically attaches to it
-- Supports both specific device addresses and auto-discovery of any Huion device
-
-**Configuration:**
-```yaml
-# Enable automatic connection detection (default: true)
-bluetooth:
-  auto_reconnect: true
-```
-
-**Testing the feature:**
-```bash
-# Start the service
-systemctl --user start huion-keydial-mini.service
-
-# Connect your device via bluetoothctl or system settings
-bluetoothctl connect AA:BB:CC:DD:EE:FF
-
-# The driver should automatically detect and attach to the device
-journalctl --user -u huion-keydial-mini.service -f
 ```
 
 ## Configuration
@@ -189,20 +195,23 @@ key_mappings: {}
 
 # Dial settings
 dial_settings:
-  clockwise_key: KEY_VOLUMEUP
-  counterclockwise_key: KEY_VOLUMEDOWN
-  click_key: KEY_MUTE
-  sensitivity: 1.0
+  DIAL_CW: "KEY_VOLUMEUP"      # Send volume up when dial is turned clockwise
+  DIAL_CCW: "KEY_VOLUMEDOWN"   # Send volume down when dial is turned counterclockwise
+  DIAL_CLICK: "KEY_MUTE"       # Send mute when dial is clicked
+  sensitivity: 1.0             # Dial sensitivity (1.0 = normal, 2.0 = double, 0.5 = half)
 
 # UInput device settings
 uinput_device_name: "Huion Keydial Mini"
 
 # Connection settings
 connection_timeout: 10.0
-auto_reconnect: true  # Enable automatic connection detection via DBus
 
 # Debug mode
 debug_mode: false
+
+# Bluetooth settings
+bluetooth:
+  auto_reconnect: true  # Enable automatic connection detection via DBus
 ```
 
 **Note**: Key mappings in the config file are loaded as initial bindings, but can be modified at runtime using `keydialctl`.
@@ -213,7 +222,7 @@ debug_mode: false
 
 1. **Check logs**:
    ```bash
-   journalctl --user -u huion-keydial-mini.service -f
+   journalctl --user -u huion-keydial-mini-user.service -f
    ```
 
 2. **Verify uinput access**:
@@ -231,7 +240,7 @@ debug_mode: false
 
 1. **Check if service is running**:
    ```bash
-   systemctl --user is-active huion-keydial-mini.service
+   systemctl --user is-active huion-keydial-mini-user.service
    ```
 
 2. **Verify bindings**:
@@ -264,6 +273,23 @@ If you get permission errors:
    ls -la /dev/uinput
    ```
 
+### Device Not Connecting
+
+1. **Check if device is paired**:
+   ```bash
+   bluetoothctl devices
+   ```
+
+2. **Verify device is connected**:
+   ```bash
+   bluetoothctl info AA:BB:CC:DD:EE:FF
+   ```
+
+3. **Check service logs for connection events**:
+   ```bash
+   journalctl --user -u huion-keydial-mini-user.service -f
+   ```
+
 ## Development
 
 ### Building from Source
@@ -285,19 +311,16 @@ python -m pytest tests/
 # Test event logger
 python -m huion_keydial_mini.event_logger --test
 
-# Test device scanning
-python -m huion_keydial_mini --scan
-
 # Test with debug logging
 python -m huion_keydial_mini --log-level DEBUG
 
-# Test Bluetooth watcher
-python test_bluetooth_watcher.py
+# Test HID diagnostic tool
+python diagnose_hid.py
 ```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Contributing
 

@@ -78,13 +78,10 @@ class DriverManager:
               type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR']),
               default='INFO',
               help='Set the logging level')
-@click.option('--scan', '-s',
-              is_flag=True,
-              help='Scan for available Huion devices')
 @click.option('--user', '-u',
               is_flag=True,
               help='Run as user-level service (for systemd user service)')
-def main(config: Optional[str], device_address: Optional[str], log_level: str, scan: bool, user: bool):
+def main(config: Optional[str], device_address: Optional[str], log_level: str, user: bool):
     """Huion Keydial Mini driver main entry point."""
 
     # Set up logging
@@ -97,11 +94,6 @@ def main(config: Optional[str], device_address: Optional[str], log_level: str, s
         # Load configuration
         app_config = Config.load(config, device_address)
 
-        if scan:
-            # Run device scan
-            asyncio.run(scan_devices())
-            return
-
         # Start the driver
         manager = DriverManager(app_config)
         asyncio.run(manager.start())
@@ -112,24 +104,6 @@ def main(config: Optional[str], device_address: Optional[str], log_level: str, s
     except Exception as e:
         logger.error(f"Driver failed: {e}")
         sys.exit(1)
-
-
-async def scan_devices():
-    """Scan for available Huion devices."""
-    from .scanner import DeviceScanner
-
-    logger.info("Scanning for Huion devices...")
-    # Enable debug mode to see all discovered devices
-    scanner = DeviceScanner(debug_mode=True)
-    devices = await scanner.scan()
-
-    if devices:
-        click.echo("Found Huion devices:")
-        for device in devices:
-            click.echo(f"  {device.address} - {device.name}")
-    else:
-        click.echo("No Huion devices found")
-        click.echo("Check the debug output above to see all discovered devices")
 
 
 async def run_driver_with_logger(event_logger, show_raw: bool = False, auto_connect: bool = True):

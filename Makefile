@@ -44,7 +44,6 @@ help:
 	@echo "  check-deps    Check for dependency issues"
 	@echo ""
 	@echo "Running:"
-	@echo "  scan          Scan for Huion devices"
 	@echo "  run           Run the driver (requires sudo)"
 	@echo "  debug         Run with debug logging (requires sudo)"
 	@echo "  event-logger  Run event logger to see parsed events"
@@ -153,9 +152,6 @@ format:
 
 check-deps:
 	$(PIP) check
-
-scan:
-	$(VENV_DIR)/bin/python -m huion_keydial_mini --scan
 
 run:
 	@echo "Note: This requires sudo privileges"

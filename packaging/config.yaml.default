@@ -1,0 +1,42 @@
+# Huion Keydial Mini Configuration
+# This is the default configuration file. Edit this file to customize your key bindings.
+
+# Device settings
+device_address: null  # Will auto-discover if not set
+
+# Key mappings (will be loaded into memory)
+# Format: button_name: "KEY_NAME" or "KEY_MODIFIER+KEY_NAME"
+# Available buttons: button_1, button_2, button_3, button_4, button_5, button_6, button_7, button_8
+# Examples:
+#   button_1: "KEY_F1"                    # Single key
+#   button_2: "KEY_LEFTCTRL+KEY_C"        # Key combination
+#   button_3: "KEY_VOLUMEUP"              # Media key
+key_mappings:
+  # button_1: "KEY_F1"
+  # button_2: "KEY_LEFTCTRL+KEY_C"
+  # button_3: "KEY_VOLUMEUP"
+  # button_4: "KEY_VOLUMEDOWN"
+  # button_5: "KEY_MUTE"
+  # button_6: "KEY_PLAYPAUSE"
+  # button_7: "KEY_ENTER"
+  # button_8: "KEY_ESC"
+
+# Dial settings
+dial_settings:
+  clockwise_key: "KEY_VOLUMEUP"      # Key to send when dial is turned clockwise
+  counterclockwise_key: "KEY_VOLUMEDOWN"  # Key to send when dial is turned counterclockwise
+  click_key: "KEY_MUTE"              # Key to send when dial is clicked
+  sensitivity: 1.0                   # Dial sensitivity (1.0 = normal, 2.0 = double, 0.5 = half)
+
+# UInput device settings
+uinput_device_name: "Huion Keydial Mini"
+
+# Connection settings
+connection_timeout: 10.0  # Timeout for device connection in seconds
+
+# Debug mode
+debug_mode: false  # Set to true for verbose logging
+
+# Bluetooth settings
+bluetooth:
+  auto_reconnect: true  # Enable automatic connection detection via DBus

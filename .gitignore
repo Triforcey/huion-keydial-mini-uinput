@@ -140,6 +140,7 @@ Thumbs.db
 
 # Project specific
 config_local.yaml
+config.yaml
 
 # Build artifacts
 *.deb

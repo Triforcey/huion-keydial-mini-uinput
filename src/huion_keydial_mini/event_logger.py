@@ -123,8 +123,8 @@ def main():
     )
     parser.add_argument(
         '--config', '-c',
-        default='config.yaml',
-        help='Configuration file path (default: config.yaml)'
+        default=None,
+        help='Configuration file path (default: auto-detect)'
     )
     parser.add_argument(
         '--raw', '-r',

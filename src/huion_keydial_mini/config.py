@@ -139,7 +139,6 @@ class Config:
         else:
             # Look for config in standard locations
             config_locations = [
-                Path.cwd() / 'config.yaml',
                 Path.home() / '.config' / 'huion-keydial-mini' / 'config.yaml',
                 Path('/etc/huion-keydial-mini/config.yaml'),
             ]

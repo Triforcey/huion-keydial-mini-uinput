@@ -101,8 +101,9 @@ install-udev-system:
 install-config:
 	@echo "Installing configuration files with proper permissions..."
 	mkdir -p ~/.config/huion-keydial-mini
-	install -m $(CONFIG_PERMS) config.yaml ~/.config/huion-keydial-mini/config.yaml
+	install -m $(CONFIG_PERMS) packaging/config.yaml.default ~/.config/huion-keydial-mini/config.yaml
 	@echo "Configuration installed with permissions: $(CONFIG_PERMS)"
+	@echo "Edit ~/.config/huion-keydial-mini/config.yaml to customize your key bindings"
 
 clean:
 	rm -rf build/

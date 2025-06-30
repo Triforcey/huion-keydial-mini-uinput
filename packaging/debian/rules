@@ -9,7 +9,7 @@ override_dh_auto_install:
 	install -D -m 644 packaging/systemd/huion-keydial-mini.service \
 		debian/huion-keydial-mini-driver/lib/systemd/system/huion-keydial-mini.service
 	# Install configuration file
-	install -D -m 644 config.yaml \
+	install -D -m 644 packaging/config.yaml.default \
 		debian/huion-keydial-mini-driver/etc/huion-keydial-mini/config.yaml
 
 override_dh_installinit:

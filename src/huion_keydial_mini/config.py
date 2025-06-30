@@ -205,23 +205,8 @@ class Config:
             'uinput': {
                 'device_name': 'Huion Keydial Mini',
             },
-            'key_mappings': {
-                # Default key mappings (can be customized)
-                'button_1': 'KEY_F1',
-                'button_2': 'KEY_F2',
-                'button_3': 'KEY_F3',
-                'button_4': 'KEY_F4',
-                'button_5': 'KEY_F5',
-                'button_6': 'KEY_F6',
-                'button_7': 'KEY_F7',
-                'button_8': 'KEY_F8',
-            },
-            'dial_settings': {
-                'sensitivity': 1.0,
-                'clockwise_key': 'KEY_VOLUMEUP',
-                'counterclockwise_key': 'KEY_VOLUMEDOWN',
-                'click_key': 'KEY_ENTER',
-            },
+            'key_mappings': {},
+            'dial_settings': {},
         }
 
     def save(self, config_path: str):

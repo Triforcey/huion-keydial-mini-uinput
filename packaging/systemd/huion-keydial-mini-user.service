@@ -1,19 +1,14 @@
 [Unit]
 Description=Huion Keydial Mini User Service
-After=huion-keydial-mini-uinput.service
-Requires=huion-keydial-mini-uinput.service
 
 [Service]
 Type=simple
 ExecStart=/usr/bin/huion-keydial-mini
-Restart=on-failure
-User=%i
 
 # User service - no need for root
 # Security settings for user service
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=true
 PrivateTmp=true
 PrivateDevices=false
 DevicePolicy=closed

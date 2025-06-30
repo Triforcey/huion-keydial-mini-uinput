@@ -5,6 +5,7 @@ import logging
 from typing import List, Optional, Dict
 import evdev
 from evdev import UInput, ecodes
+import time
 
 from .config import Config
 from .hid_parser import InputEvent, EventType
@@ -106,11 +107,23 @@ class UInputHandler:
 
     def _try_open_device(self):
         """Try to open the existing uinput device."""
-        try:
-            self.device = UInput(events=self.capabilities, name=self.config.uinput_device_name)
-        except Exception as e:
-            logger.warning(f"Could not open uinput device '{self.config.uinput_device_name}': {e}")
-            self.device = None
+        max_retries = 30  # Wait up to 30 seconds
+        retry_delay = 1.0
+
+        logger.info(f"Waiting for uinput device '{self.config.uinput_device_name}' to be available...")
+
+        for attempt in range(max_retries):
+            try:
+                self.device = UInput(events=self.capabilities, name=self.config.uinput_device_name)
+                logger.info(f"Successfully opened uinput device '{self.config.uinput_device_name}'")
+                return
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.info(f"Waiting for uinput device... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"Failed to open uinput device '{self.config.uinput_device_name}' after {max_retries} attempts: {e}")
+                    raise RuntimeError(f"uinput device not available after {max_retries} seconds")
 
     def _build_capabilities(self) -> Dict:
         """Build device capabilities based on configuration and keybind manager."""
@@ -164,10 +177,6 @@ class UInputHandler:
             # Execute the action based on its type
             if action.type == BindEventType.KEYBOARD:
                 await self._send_keyboard_action(action, event)
-            elif action.type == BindEventType.MOUSE:
-                await self._send_mouse_action(action, event)
-            elif action.type == BindEventType.COMBO:
-                await self._send_combo_action(action, event)
             else:
                 logger.warning(f"Unknown action type: {action.type}")
 
@@ -218,52 +227,6 @@ class UInputHandler:
 
         except Exception as e:
             logger.error(f"Error sending keyboard action: {e}")
-
-    async def _send_mouse_action(self, action: KeybindAction, event: InputEvent):
-        """Send a mouse action."""
-        if not action.mouse_action:
-            logger.warning("Mouse action has no action defined")
-            return
-
-        if not self.device:
-            logger.warning("No virtual device available")
-            return
-
-        try:
-            if action.mouse_action == "scroll":
-                # Handle scroll events
-                if event.direction:
-                    scroll_amount = event.direction * 3  # Adjust sensitivity
-                    self.device.write(evdev.ecodes.EV_REL, evdev.ecodes.REL_WHEEL, scroll_amount)
-                    self.device.syn()
-                    logger.debug(f"Mouse scroll: {scroll_amount}")
-
-            elif action.mouse_action == "click":
-                # Handle mouse clicks
-                if action.mouse_button == "left":
-                    button_code = evdev.ecodes.BTN_LEFT
-                elif action.mouse_button == "right":
-                    button_code = evdev.ecodes.BTN_RIGHT
-                elif action.mouse_button == "middle":
-                    button_code = evdev.ecodes.BTN_MIDDLE
-                else:
-                    button_code = evdev.ecodes.BTN_LEFT  # Default to left
-
-                is_press = event.event_type == EventType.KEY_PRESS
-                value = 1 if is_press else 0
-
-                self.device.write(evdev.ecodes.EV_KEY, button_code, value)
-                self.device.syn()
-                logger.debug(f"Mouse {action.mouse_button} click: {value}")
-
-        except Exception as e:
-            logger.error(f"Error sending mouse action: {e}")
-
-    async def _send_combo_action(self, action: KeybindAction, event: InputEvent):
-        """Send a combo action (keyboard + mouse)."""
-        # For now, treat combo as keyboard action
-        # This can be expanded later for true keyboard+mouse combos
-        await self._send_keyboard_action(action, event)
 
     def get_supported_keys(self) -> List[str]:
         """Get list of supported key names."""

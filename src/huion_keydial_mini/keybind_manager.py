@@ -20,8 +20,6 @@ logger = logging.getLogger(__name__)
 class EventType(Enum):
     """Types of events that can be bound."""
     KEYBOARD = "keyboard"
-    MOUSE = "mouse"
-    COMBO = "combo"
 
 
 @dataclass
@@ -29,9 +27,6 @@ class KeybindAction:
     """Represents a keybind action."""
     type: EventType
     keys: Optional[List[str]] = None
-    mouse_action: Optional[str] = None
-    mouse_button: Optional[str] = None
-    mouse_direction: Optional[str] = None
     description: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -39,9 +34,6 @@ class KeybindAction:
         return {
             'type': self.type.value,
             'keys': self.keys,
-            'mouse_action': self.mouse_action,
-            'mouse_button': self.mouse_button,
-            'mouse_direction': self.mouse_direction,
             'description': self.description
         }
 
@@ -51,9 +43,6 @@ class KeybindAction:
         return cls(
             type=EventType(data['type']),
             keys=data.get('keys'),
-            mouse_action=data.get('mouse_action'),
-            mouse_button=data.get('mouse_button'),
-            mouse_direction=data.get('mouse_direction'),
             description=data.get('description')
         )
 

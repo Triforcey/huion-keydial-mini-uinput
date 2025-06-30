@@ -3,7 +3,6 @@ import signal
 import sys
 import time
 from evdev import UInput, ecodes
-from huion_keydial_mini.uinput_handler import UInputHandler
 from huion_keydial_mini.config import Config
 
 logging.basicConfig(level=logging.INFO)
@@ -19,14 +18,21 @@ def main():
         'dial_settings': {},
     }
     config = Config(config_data)
-    handler = UInputHandler(config)
+
+    # Create the uinput device directly
+    capabilities = {
+        ecodes.EV_KEY: list(range(1, 256)),  # All possible key codes
+        ecodes.EV_ABS: [],
+    }
+
     device = None
 
     def cleanup(signum, frame):
         logger.info("Received signal to terminate, cleaning up...")
         try:
-            if handler.device:
-                handler.device.close()
+            if device:
+                device.close()
+                logger.info("uinput device closed and destroyed")
         except Exception as e:
             logger.warning(f"Error closing device: {e}")
         sys.exit(0)
@@ -35,10 +41,15 @@ def main():
     signal.signal(signal.SIGINT, cleanup)
 
     try:
-        logger.info(f"uinput device created: {config.uinput_device_name}")
-        # Hold process
+        # Create the uinput device
+        device = UInput(events=capabilities, name=config.uinput_device_name)
+        logger.info(f"uinput device created successfully: {config.uinput_device_name}")
+
+        # Keep the device open and process running
         while True:
             time.sleep(60)
+            logger.debug("uinput device still active")
+
     except Exception as e:
         logger.error(f"Failed to create uinput device: {e}")
         sys.exit(1)
@@ -47,6 +58,5 @@ if __name__ == "__main__":
     main()
 
 # Entry point for setuptools
-
 def cli():
     main()

@@ -83,7 +83,7 @@ class Config:
     @property
     def uinput_device_name(self) -> str:
         """Get the uinput device name."""
-        name = self.data.get('uinput', {}).get('device_name', 'Huion Keydial Mini')
+        name = self.data.get('uinput', {}).get('device_name', 'huion-keydial-mini-uinput')
         return str(name)
 
     @property
@@ -94,7 +94,7 @@ class Config:
             return {}
         # Ensure all values are strings with proper type checking
         result: Dict[str, str] = {}
-        for k, v in mappings.items():  # type: ignore
+        for k, v in mappings.items():
             if isinstance(k, str) and v is not None:
                 result[k] = str(v)
         return result
@@ -108,7 +108,7 @@ class Config:
 
         # Cast specific dial settings to appropriate types
         result: Dict[str, Any] = {}
-        for key, value in settings.items():  # type: ignore
+        for key, value in settings.items():
             if not isinstance(key, str):
                 continue
 
@@ -117,7 +117,7 @@ class Config:
                     result[key] = float(value) if value is not None else 1.0
                 except (TypeError, ValueError):
                     result[key] = 1.0
-            elif key in ['clockwise_key', 'counterclockwise_key', 'click_key']:
+            elif key in ['DIAL_CW', 'DIAL_CCW', 'DIAL_CLICK']:
                 result[key] = str(value) if value is not None else None
             else:
                 result[key] = value
@@ -202,7 +202,7 @@ class Config:
                 'reconnect_attempts': 3,
             },
             'uinput': {
-                'device_name': 'Huion Keydial Mini',
+                'device_name': 'huion-keydial-mini-uinput',
             },
             'key_mappings': {},
             'dial_settings': {},

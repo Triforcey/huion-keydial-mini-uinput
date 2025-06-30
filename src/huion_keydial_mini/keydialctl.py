@@ -40,53 +40,36 @@ def cli(ctx, config: Optional[str]):
     'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8',
     'DIAL_CW', 'DIAL_CCW', 'DIAL_CLICK'
 ]))
-@click.argument('action_type', type=click.Choice(['keyboard', 'mouse', 'combo']))
-@click.argument('action_data')
+@click.argument('key_data')
 @click.pass_context
-def bind(ctx, action_id: str, action_type: str, action_data: str):
-    """Bind an action to a key or mouse event.
+def bind(ctx, action_id: str, key_data: str):
+    """Bind a keyboard action to a button or dial event.
 
-    ACTION_ID: Action identifier (BUTTON_1-8, dial_clockwise, etc.)
-    ACTION_TYPE: Type of action (keyboard, mouse, combo)
-    ACTION_DATA: Action data (e.g., "KEY_F1", "KEY_CTRL+KEY_C", "scroll", "left_click")
+    ACTION_ID: Action identifier (BUTTON_1-8, DIAL_CW, DIAL_CCW, DIAL_CLICK)
+    KEY_DATA: Key data (e.g., "KEY_F1", "KEY_CTRL+KEY_C")
+
+    Note: You can also configure actions in the config file using the new format:
+
+    BUTTON_1:
+      type: "keyboard"
+      keys: ["KEY_F1"]
+      description: "Button 1 -> F1"
+
+    BUTTON_2:
+      type: "keyboard"
+      keys: ["KEY_LEFTCTRL", "KEY_C"]
+      description: "Button 2 -> Copy"
     """
     async def do_bind():
         socket_path = get_socket_path()
 
-        # Parse action data based on type
-        if action_type == 'keyboard':
-            keys = [k.strip() for k in action_data.split('+')]
-            action = {
-                'type': 'keyboard',
-                'keys': keys,
-                'description': f"{action_id} -> {action_data}"
-            }
-        elif action_type == 'mouse':
-            if action_data == 'scroll':
-                action = {
-                    'type': 'mouse',
-                    'mouse_action': 'scroll',
-                    'description': f"{action_id} -> mouse scroll"
-                }
-            elif action_data.endswith('_click'):
-                button = action_data.replace('_click', '')
-                action = {
-                    'type': 'mouse',
-                    'mouse_action': 'click',
-                    'mouse_button': button,
-                    'description': f"{action_id} -> {button} click"
-                }
-            else:
-                click.echo(f"Error: Unknown mouse action '{action_data}'", err=True)
-                click.echo("Supported mouse actions: scroll, left_click, right_click, middle_click")
-                return
-        else:  # combo
-            keys = [k.strip() for k in action_data.split('+')]
-            action = {
-                'type': 'combo',
-                'keys': keys,
-                'description': f"{action_id} -> combo {action_data}"
-            }
+        # Parse key data
+        keys = [k.strip() for k in key_data.split('+')]
+        action = {
+            'type': 'keyboard',
+            'keys': keys,
+            'description': f"{action_id} -> {key_data}"
+        }
 
         command = {
             'command': 'set_binding',
@@ -97,7 +80,7 @@ def bind(ctx, action_id: str, action_type: str, action_data: str):
         response = await send_command(socket_path, command)
 
         if response['status'] == 'success':
-            click.echo(f"Bound {action_id} to {action_data}")
+            click.echo(f"Bound {action_id} to {key_data}")
         else:
             click.echo(f"Error: {response['message']}", err=True)
             sys.exit(1)
@@ -191,9 +174,9 @@ def list_bindings(ctx):
 
             # Show dial settings
             dial_settings = config.dial_settings
-            click.echo(f"  dial_clockwise: {dial_settings.get('clockwise_key', 'unset')}")
-            click.echo(f"  dial_counterclockwise: {dial_settings.get('counterclockwise_key', 'unset')}")
-            click.echo(f"  dial_click: {dial_settings.get('click_key', 'unset')}")
+            click.echo(f"  DIAL_CW: {dial_settings.get('DIAL_CW', 'unset')}")
+            click.echo(f"  DIAL_CCW: {dial_settings.get('DIAL_CCW', 'unset')}")
+            click.echo(f"  DIAL_CLICK: {dial_settings.get('DIAL_CLICK', 'unset')}")
 
             click.echo()
             click.echo("Note: Start the service to use runtime keybind management")

@@ -38,6 +38,9 @@ def cli(ctx, config: Optional[str]):
 @click.argument('action_id', type=click.Choice([
     'BUTTON_1', 'BUTTON_2', 'BUTTON_3', 'BUTTON_4',
     'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8',
+    'BUTTON_9', 'BUTTON_10', 'BUTTON_11', 'BUTTON_12',
+    'BUTTON_13', 'BUTTON_14', 'BUTTON_15', 'BUTTON_16',
+    'BUTTON_17', 'BUTTON_18',
     'DIAL_CW', 'DIAL_CCW', 'DIAL_CLICK'
 ]))
 @click.argument('key_data')
@@ -171,7 +174,10 @@ def list_bindings(ctx):
 
             # Show button mappings
             for button in ['BUTTON_1', 'BUTTON_2', 'BUTTON_3', 'BUTTON_4',
-                          'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8']:
+                          'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8',
+                          'BUTTON_9', 'BUTTON_10', 'BUTTON_11', 'BUTTON_12',
+                          'BUTTON_13', 'BUTTON_14', 'BUTTON_15', 'BUTTON_16',
+                          'BUTTON_17', 'BUTTON_18']:
                 key = config.key_mappings.get(button, 'unbound')
                 click.echo(f"  {button}: {key}")
 

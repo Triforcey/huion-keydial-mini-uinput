@@ -1,10 +1,6 @@
 # Only unbind hid-generic from the first input occurrence (input0) of the Huion Keydial Mini
 ACTION=="add", SUBSYSTEMS=="input", ATTRS{id/vendor}=="256c", ATTRS{id/product}=="8251", ATTRS{name}=="*Keydial*", RUN+="/usr/local/bin/unbind-huion.sh $env{DEVPATH}"
 
-# Allow active local user session access to uinput
-# KERNEL=="uinput", TAG+="uaccess"
-KERNEL=="event*", ATTRS{name}=="huion-keydial-mini-uinput", TAG+="uaccess"
-
 # Allow user access of huion keydial mini
 KERNEL=="event*", SUBSYSTEM=="input", ATTRS{name}=="Huion Keydial Mini", TAG+="uaccess"
 # Set huion keydial mini as not a tablet

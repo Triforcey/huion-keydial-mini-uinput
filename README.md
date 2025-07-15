@@ -226,6 +226,7 @@ bluetooth:
    ```
 
 2. **Verify uinput access**:
+   > Shouldn't be necessary if running as a user service
    ```bash
    ls -la /dev/uinput
    groups $USER  # Should include 'input'

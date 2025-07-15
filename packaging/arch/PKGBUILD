@@ -47,8 +47,6 @@ package() {
     cd "$srcdir"
     python -m installer --destdir="$pkgdir" dist/*.whl
     PROJECT_ROOT="${PROJECT_ROOT:-$PWD/../..}"
-    install -Dm644 "$PROJECT_ROOT/packaging/systemd/huion-keydial-mini-uinput.service" \
-        "$pkgdir/usr/lib/systemd/system/huion-keydial-mini-uinput.service"
     install -Dm644 "$PROJECT_ROOT/packaging/systemd/huion-keydial-mini-user.service" \
         "$pkgdir/usr/lib/systemd/user/huion-keydial-mini-user.service"
     install -Dm644 "$PROJECT_ROOT/packaging/udev/99-huion-keydial-mini.rules" \
@@ -61,9 +59,9 @@ package() {
         "$pkgdir/usr/share/doc/$pkgname/README.md"
     install -Dm644 "$PROJECT_ROOT/LICENSE" \
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
-    install -Dm755 /dev/stdin "$pkgdir/usr/lib/systemd/system-preset/99-huion-keydial-mini.preset" << 'EOF'
-# Enable huion-keydial-mini-uinput service
-enable huion-keydial-mini-uinput.service
+    install -Dm755 /dev/stdin "$pkgdir/usr/lib/systemd/user-preset/99-huion-keydial-mini.preset" << 'EOF'
+# Enable huion-keydial-mini-user service
+enable huion-keydial-mini-user.service
 EOF
 }
 

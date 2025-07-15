@@ -1,16 +1,19 @@
 Source: huion-keydial-mini-driver
 Section: utils
 Priority: optional
-Maintainer: Your Name <your.email@example.com>
+Maintainer: JD Flamm <judsonwebdesign@gmail.com>
 Build-Depends: debhelper-compat (= 13),
                dh-python,
                python3-all,
                python3-setuptools,
-               python3-pip
+               python3-pip,
+               python3-build,
+               python3-installer,
+               python3-wheel
 Standards-Version: 4.6.0
-Homepage: https://github.com/your-username/huion-keydial-mini-uinput
-Vcs-Git: https://github.com/your-username/huion-keydial-mini-uinput.git
-Vcs-Browser: https://github.com/your-username/huion-keydial-mini-uinput
+Homepage: https://github.com/Triforcey/huion-keydial-mini-uinput
+Vcs-Git: https://github.com/Triforcey/huion-keydial-mini-uinput.git
+Vcs-Browser: https://github.com/Triforcey/huion-keydial-mini-uinput
 
 Package: huion-keydial-mini-driver
 Architecture: all
@@ -21,7 +24,11 @@ Depends: ${python3:Depends},
          python3-pyudev,
          python3-click,
          python3-yaml,
-         bluetooth
+         python3-dbus-next,
+         systemd,
+         bluez
+Provides: huion-keydial-mini
+Conflicts: huion-keydial-mini
 Description: User space driver for Huion Keydial Mini bluetooth device
  This package provides a user space driver for the Huion Keydial Mini
  bluetooth device. It intercepts HID over BLE events and creates a

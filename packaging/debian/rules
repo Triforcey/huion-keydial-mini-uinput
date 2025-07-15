@@ -5,12 +5,24 @@
 
 override_dh_auto_install:
 	dh_auto_install
-	# Install systemd service file
-	install -D -m 644 packaging/systemd/huion-keydial-mini.service \
-		debian/huion-keydial-mini-driver/lib/systemd/system/huion-keydial-mini.service
+	# Install systemd service files
+	install -D -m 644 packaging/systemd/huion-keydial-mini-user.service \
+		debian/huion-keydial-mini-driver/lib/systemd/user/huion-keydial-mini-user.service
+	# Install udev rules
+	install -D -m 644 packaging/udev/99-huion-keydial-mini.rules \
+		debian/huion-keydial-mini-driver/lib/udev/rules.d/99-huion-keydial-mini.rules
+	# Install unbind script
+	install -D -m 755 packaging/udev/unbind-huion.sh \
+		debian/huion-keydial-mini-driver/usr/local/bin/unbind-huion.sh
 	# Install configuration file
 	install -D -m 644 packaging/config.yaml.default \
 		debian/huion-keydial-mini-driver/etc/huion-keydial-mini/config.yaml
+	# Install systemd preset
+	install -D -m 644 /dev/stdin \
+		debian/huion-keydial-mini-driver/lib/systemd/user-preset/99-huion-keydial-mini.preset << 'EOF'
+# Enable huion-keydial-mini-user service
+enable huion-keydial-mini-user.service
+EOF
 
 override_dh_installinit:
-	dh_installinit --name=huion-keydial-mini
+	dh_installinit --name=huion-keydial-mini-user

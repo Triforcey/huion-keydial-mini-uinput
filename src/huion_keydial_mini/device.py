@@ -281,6 +281,9 @@ class HuionKeydialMini:
             self.connected = True
             logger.info("Connected successfully")
 
+            # Ensure service discovery is complete before proceeding
+            await self._ensure_service_discovery()
+
             # Log available services and characteristics
             await self._log_services()
 
@@ -288,6 +291,37 @@ class HuionKeydialMini:
             logger.error(f"Connection failed: {e}")
             self.connected = False
             raise
+
+    async def _ensure_service_discovery(self):
+        """Ensure service discovery is complete before proceeding."""
+        if not self.client:
+            return
+
+        logger.info("Ensuring service discovery is complete...")
+
+        # Wait for service discovery to complete by checking if services are available
+        max_attempts = 10
+        attempt = 0
+
+        while attempt < max_attempts:
+            try:
+                # Try to access services - this will trigger service discovery if not done
+                services = list(self.client.services)
+                if services:
+                    logger.info(f"Service discovery complete - found {len(services)} services")
+                    return
+                else:
+                    # Services not yet available, wait a bit
+                    await asyncio.sleep(0.5)
+                    attempt += 1
+                    logger.debug(f"Waiting for service discovery... attempt {attempt}/{max_attempts}")
+            except Exception as e:
+                logger.debug(f"Service discovery not ready: {e}")
+                await asyncio.sleep(0.5)
+                attempt += 1
+
+        # If we get here, service discovery might have failed
+        logger.warning("Service discovery may not be complete, but proceeding anyway")
 
     async def _log_services(self):
         """Log available services and characteristics."""
@@ -329,6 +363,9 @@ class HuionKeydialMini:
         """Find all notification-capable characteristics."""
         if not self.client:
             return []
+
+        # Ensure service discovery is complete before accessing services
+        await self._ensure_service_discovery()
 
         notification_chars = []
 

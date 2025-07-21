@@ -265,14 +265,27 @@ class BluetoothWatcher:
                 if "org.bluez.Device1" in interfaces:
                     device_props = interfaces["org.bluez.Device1"]
 
-                    # Check if device is connected
-                    if device_props.get("Connected", False):
+                    # Check if device is connected (handle Variant objects)
+                    connected_variant = device_props.get("Connected", False)
+                    connected = connected_variant.value if hasattr(connected_variant, 'value') else connected_variant
+
+                    if connected:
                         mac_address = self._dbus_path_to_mac(path)
                         if mac_address:
+                            # Extract actual values from Variant objects
+                            name_variant = device_props.get("Name", "Unknown")
+                            name = name_variant.value if hasattr(name_variant, 'value') else str(name_variant)
+
+                            paired_variant = device_props.get("Paired", False)
+                            paired = paired_variant.value if hasattr(paired_variant, 'value') else paired_variant
+
+                            trusted_variant = device_props.get("Trusted", False)
+                            trusted = trusted_variant.value if hasattr(trusted_variant, 'value') else trusted_variant
+
                             connected_devices[mac_address] = {
-                                "name": device_props.get("Name", "Unknown"),
-                                "paired": device_props.get("Paired", False),
-                                "trusted": device_props.get("Trusted", False),
+                                "name": name,
+                                "paired": paired,
+                                "trusted": trusted,
                                 "path": path
                             }
 

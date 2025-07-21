@@ -1,8 +1,9 @@
 huion-keydial-mini-driver (1.0.1-1) unstable; urgency=medium
 
-  * Fix Bluetooth service discovery timing issue
-  * Add proper service discovery wait before starting HID notifications
-  * Resolve "Service Discovery has not been performed yet" errors
+  * Fix Bluetooth device filtering to prevent connecting to wrong devices
+  * Add device name validation in connection callbacks
+  * Fix configuration structure mapping for flat YAML format
+  * Resolve connection issues with non-Huion devices
 
  -- JD Flamm <judsonwebdesign@gmail.com>  Mon, 21 Jul 2025 12:00:00 +0000
 

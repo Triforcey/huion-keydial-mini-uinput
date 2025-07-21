@@ -141,10 +141,32 @@ class HuionKeydialMini:
         """Handle device connection detected via DBus."""
         logger.info(f"Device {mac_address} connected (detected via DBus)")
 
-        # Only handle if this is our target device or we don't have a specific target
+        # If we have a specific target device, only handle that one
         if (self.config.device_address and
             mac_address.upper() != self.config.device_address.upper()):
+            logger.debug(f"Ignoring connection for non-target device: {mac_address}")
             return
+
+        # If we don't have a specific target, check if this is a Huion device by name
+        if not self.config.device_address:
+            try:
+                # Get device info to check the name
+                if self.bluetooth_watcher:
+                    connected_devices = await self.bluetooth_watcher.get_connected_devices()
+                    device_info = connected_devices.get(mac_address, {})
+                    device_name = device_info.get('name', '')
+
+                    if not self._is_huion_device_name(device_name):
+                        logger.debug(f"Ignoring non-Huion device: {device_name} ({mac_address})")
+                        return
+
+                    logger.info(f"Found Huion device: {device_name} ({mac_address})")
+                else:
+                    logger.warning("Cannot check device name - BluetoothWatcher not available")
+                    return
+            except Exception as e:
+                logger.warning(f"Failed to check device name for {mac_address}: {e}")
+                return
 
         # If we're already connected to this device, ignore
         if (self.connected and self.device_info and
@@ -208,8 +230,12 @@ class HuionKeydialMini:
                 name=f"Huion Device ({mac_address})"
             )
 
-            # Connect to the device using regular connection method
+            # Connect immediately - no delays or extra steps
             await self._connect_with_retry()
+
+            if not self.connected or not self.client:
+                raise RuntimeError(f"Connection failed: connected={self.connected}, client_exists={self.client is not None}")
+
             await self._start_notifications()
 
             logger.info(f"Successfully attached to {mac_address}")
@@ -236,9 +262,18 @@ class HuionKeydialMini:
 
         logger.info("Detached from device - waiting for next connection")
 
-    def _is_huion_device_name(self, device_name: str) -> bool:
+    def _is_huion_device_name(self, device_name: Any) -> bool:
         """Check if a device name matches Huion device patterns."""
         if not device_name:
+            return False
+
+        # Handle potential Variant objects or other types defensively
+        try:
+            if hasattr(device_name, 'value'):
+                device_name = device_name.value
+            device_name = str(device_name)
+        except Exception:
+            logger.warning(f"Could not convert device name to string: {device_name}")
             return False
 
         device_name_lower = device_name.lower()
@@ -247,21 +282,21 @@ class HuionKeydialMini:
 
     async def _connect_with_retry(self):
         """Connect to the device with retry logic."""
-        while self.reconnect_attempts < self.max_reconnect_attempts:
+        max_quick_attempts = 3  # Fewer attempts but faster
+
+        for attempt in range(max_quick_attempts):
             try:
                 await self._connect()
                 self.reconnect_attempts = 0  # Reset on successful connection
                 return
             except Exception as e:
-                self.reconnect_attempts += 1
-                logger.warning(f"Connection attempt {self.reconnect_attempts} failed: {e}")
+                logger.warning(f"Connection attempt {attempt + 1} failed: {e}")
 
-                if self.reconnect_attempts < self.max_reconnect_attempts:
-                    wait_time = min(2 ** self.reconnect_attempts, 30)  # Exponential backoff, max 30s
-                    logger.info(f"Retrying in {wait_time} seconds...")
-                    await asyncio.sleep(wait_time)
+                if attempt < max_quick_attempts - 1:
+                    # Quick retry - only 1 second delay
+                    await asyncio.sleep(1.0)
                 else:
-                    logger.error("Max reconnection attempts reached")
+                    logger.error("Connection attempts failed")
                     raise
 
     async def _connect(self):
@@ -278,50 +313,18 @@ class HuionKeydialMini:
 
         try:
             await self.client.connect()
-            self.connected = True
-            logger.info("Connected successfully")
 
-            # Ensure service discovery is complete before proceeding
-            await self._ensure_service_discovery()
-
-            # Log available services and characteristics
-            await self._log_services()
+            if self.client.is_connected:
+                self.connected = True
+                logger.info("Connected successfully")
+                await self._log_services()
+            else:
+                raise RuntimeError("BleakClient reports not connected after connect() call")
 
         except Exception as e:
             logger.error(f"Connection failed: {e}")
             self.connected = False
             raise
-
-    async def _ensure_service_discovery(self):
-        """Ensure service discovery is complete before proceeding."""
-        if not self.client:
-            return
-
-        logger.info("Ensuring service discovery is complete...")
-
-        # Wait for service discovery to complete by checking if services are available
-        max_attempts = 10
-        attempt = 0
-
-        while attempt < max_attempts:
-            try:
-                # Try to access services - this will trigger service discovery if not done
-                services = list(self.client.services)
-                if services:
-                    logger.info(f"Service discovery complete - found {len(services)} services")
-                    return
-                else:
-                    # Services not yet available, wait a bit
-                    await asyncio.sleep(0.5)
-                    attempt += 1
-                    logger.debug(f"Waiting for service discovery... attempt {attempt}/{max_attempts}")
-            except Exception as e:
-                logger.debug(f"Service discovery not ready: {e}")
-                await asyncio.sleep(0.5)
-                attempt += 1
-
-        # If we get here, service discovery might have failed
-        logger.warning("Service discovery may not be complete, but proceeding anyway")
 
     async def _log_services(self):
         """Log available services and characteristics."""
@@ -363,9 +366,6 @@ class HuionKeydialMini:
         """Find all notification-capable characteristics."""
         if not self.client:
             return []
-
-        # Ensure service discovery is complete before accessing services
-        await self._ensure_service_discovery()
 
         notification_chars = []
 

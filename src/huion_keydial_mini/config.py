@@ -167,6 +167,22 @@ class Config:
                 raw_data['device'] = {}
             raw_data['device']['address'] = device_address
 
+        # Handle flat config structure mapping to nested structure
+        if 'device_address' in raw_data:
+            if 'device' not in raw_data:
+                raw_data['device'] = {}
+            raw_data['device']['address'] = raw_data.pop('device_address')
+
+        if 'connection_timeout' in raw_data:
+            if 'bluetooth' not in raw_data:
+                raw_data['bluetooth'] = {}
+            raw_data['bluetooth']['connection_timeout'] = raw_data.pop('connection_timeout')
+
+        if 'uinput_device_name' in raw_data:
+            if 'uinput' not in raw_data:
+                raw_data['uinput'] = {}
+            raw_data['uinput']['device_name'] = raw_data.pop('uinput_device_name')
+
         # Start with defaults and merge user data
         config_data = cls._get_default_config()
         config_data = cls._merge_config_data(config_data, raw_data)

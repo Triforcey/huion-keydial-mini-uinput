@@ -1,3 +1,9 @@
+huion-keydial-mini-driver (1.1.0-1) unstable; urgency=medium
+
+  * Add support for button combinations
+
+ -- JD Flamm <judsonwebdesign@gmail.com>  Mon, 28 Jul 2025 12:00:00 +0000
+
 huion-keydial-mini-driver (1.0.1-1) unstable; urgency=medium
 
   * Fix Bluetooth device filtering to prevent connecting to wrong devices

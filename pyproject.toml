@@ -78,6 +78,7 @@ markers = [
     "integration: Integration tests",
     "hid_parser: HID parser specific tests",
     "combo: Button combo functionality tests",
+    "keybind_manager: Keybind manager functionality tests",
 ]
 
 [tool.coverage.run]

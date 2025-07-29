@@ -28,13 +28,15 @@ class KeybindAction:
     type: EventType
     keys: Optional[List[str]] = None
     description: Optional[str] = None
+    sticky: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             'type': self.type.value,
             'keys': self.keys,
-            'description': self.description
+            'description': self.description,
+            'sticky': self.sticky
         }
 
     @classmethod
@@ -43,7 +45,8 @@ class KeybindAction:
         return cls(
             type=EventType(data['type']),
             keys=data.get('keys'),
-            description=data.get('description')
+            description=data.get('description'),
+            sticky=data.get('sticky', False)
         )
 
 
@@ -65,24 +68,29 @@ class KeybindManager:
 
     def _load_initial_bindings(self):
         """Load initial keybindings from config."""
-        # Load button mappings (including combos!)
-        for action_id, key in self.config.key_mappings.items():
-            # Type validation: both key and value must be strings
-            if not isinstance(action_id, str):
-                logger.warning(f"Config: Action ID must be a string, ignoring: {action_id}")
-                continue
-            if not isinstance(key, str) or not key:
-                logger.warning(f"Config: Key mapping must be a non-empty string, ignoring: {action_id} -> {key}")
-                continue
 
-            # Validate and normalize action_id (same logic as CLI)
-            normalized_action_id = self._validate_and_normalize_action_id(action_id)
-            if normalized_action_id:
-                self.keybind_map[normalized_action_id] = KeybindAction(
-                    type=EventType.KEYBOARD,
-                    keys=[k.strip() for k in key.split('+')],
-                    description=f"{normalized_action_id} -> {key}"
-                )
+        def handle_key_mapping(mappings: Dict[str, str], sticky: bool = False):
+            for action_id, key in mappings.items():
+                # Type validation: both key and value must be strings
+                if not isinstance(action_id, str):
+                    logger.warning(f"Config: Action ID must be a string, ignoring: {action_id}")
+                    continue
+                if not isinstance(key, str) or not key:
+                    logger.warning(f"Config: Key mapping must be a non-empty string, ignoring: {action_id} -> {key}")
+                    continue
+
+                normalized_action_id = self._validate_and_normalize_action_id(action_id)
+                if normalized_action_id:
+                    self.keybind_map[normalized_action_id] = KeybindAction(
+                        type=EventType.KEYBOARD,
+                        keys=[k.strip() for k in key.split('+')],
+                        description=f"{normalized_action_id} -> {key}",
+                        sticky=sticky
+                    )
+
+        # Load key mappings
+        handle_key_mapping(self.config.key_mappings)
+        handle_key_mapping(self.config.sticky_key_mappings, sticky=True)
 
         # Load dial settings
         dial_settings = self.config.dial_settings

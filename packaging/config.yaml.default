@@ -36,6 +36,9 @@ key_mappings:
   # BUTTON_2+BUTTON_3: "KEY_LEFTCTRL+KEY_Z"          # Undo
   # BUTTON_1+BUTTON_2+BUTTON_3: "KEY_LEFTCTRL+KEY_SHIFT+KEY_Z"  # Redo
 
+sticky_key_mappings:
+  # BUTTON_1: "KEY_LEFTCTRL"
+
 # Dial settings
 dial_settings:
   DIAL_CW: "KEY_VOLUMEUP"      # Send volume up when dial is turned clockwise

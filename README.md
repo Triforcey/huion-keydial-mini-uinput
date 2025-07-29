@@ -63,6 +63,9 @@ systemctl --user enable --now huion-keydial-mini-user.service
    # Bind dial clockwise to volume up
    keydialctl bind DIAL_CW keyboard KEY_VOLUMEUP
 
+   # Sticky bind button 1 to F1 key
+   keydialctl bind --sticky BUTTON_1 keyboard KEY_F1
+
    # Remove a binding
    keydialctl unbind BUTTON_1
    ```
@@ -83,6 +86,10 @@ systemctl --user enable --now huion-keydial-mini-user.service
 
 **Combo Actions:**
 - Mixed keyboard/mouse actions (future enhancement)
+
+**Stick Actions:**
+- Key bindings can be set as 'sticky', meaning they press and hold until released.
+- Sticky key bindings block other key bindings from being triggered until they are released.
 
 ### Service Management
 

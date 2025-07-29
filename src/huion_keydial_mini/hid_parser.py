@@ -38,6 +38,10 @@ class HIDParser:
         self.report_formats = {}  # Cache discovered report formats
         self.debug_mode = getattr(config, 'debug_mode', False)
 
+        # Combo detection state
+        self.peak_buttons_this_session = set()  # Track peak button set for combo detection
+        self.key_event_triggered = False  # Flag to prevent multiple actions per session
+
     def parse(self, data: bytearray, characteristic_uuid: Optional[str] = None) -> List[InputEvent]:
         """Parse HID data and return input events."""
         events = []
@@ -84,7 +88,7 @@ class HIDParser:
         return ""
 
     def _parse_button_events(self, data: bytearray) -> List[InputEvent]:
-        """Parse button events from Handle 0x001f format."""
+        """Parse button events with combo detection support."""
         events = []
 
         if len(data) < 8:
@@ -97,40 +101,83 @@ class HIDParser:
             return events
 
         # Get current button names from data
-        current_button_names = self._get_button_names_from_data(data)
+        current_button_names = set(self._get_button_names_from_data(data))
 
         # Get previous button state
         previous_button_names = set(self.previous_state.get('button_names', []))
 
-        # Find pressed buttons (new buttons)
-        pressed_buttons = set(current_button_names) - previous_button_names
-        # Find released buttons (buttons that were pressed before)
-        released_buttons = previous_button_names - set(current_button_names)
+        # Find pressed and released buttons
+        pressed_buttons = current_button_names - previous_button_names
+        released_buttons = previous_button_names - current_button_names
 
-        # Generate events for pressed buttons
-        for button_name in pressed_buttons:
-            key_code = button_name
-            if key_code:
+        # Update peak button set and handle session resets
+        if pressed_buttons:
+            # Any new button press resets the event trigger flag to allow new combos
+            # This enables rapid-fire combos: hold BUTTON_1, press BUTTON_2, release BUTTON_2 (triggers combo),
+            # press BUTTON_3, release BUTTON_3 (triggers different combo), all while BUTTON_1 is held
+            self.key_event_triggered = False
+
+            # Update peak button set if needed
+            if current_button_names != self.peak_buttons_this_session:
+                # Different button combination (including new peaks), update peak set
+                self.peak_buttons_this_session = current_button_names.copy()
+
+        # Handle button releases - this is where combo detection happens
+        if released_buttons and not self.key_event_triggered:
+            # Check if we have a combo mapping for the peak button set
+            combo_id = self._generate_combo_id(self.peak_buttons_this_session)
+            if combo_id and self._should_check_combo_mapping(combo_id):
+                if self.debug_mode:
+                    logger.debug(f"Checking combo mapping for: {combo_id}")
+
+                # Generate combo events (press then release immediately)
                 events.append(InputEvent(
                     event_type=EventType.KEY_PRESS,
-                    key_code=key_code,
+                    key_code=combo_id,
                     raw_data=data
                 ))
-
-        # Generate events for released buttons
-        for button_name in released_buttons:
-            key_code = button_name
-            if key_code:
                 events.append(InputEvent(
                     event_type=EventType.KEY_RELEASE,
-                    key_code=key_code,
+                    key_code=combo_id,
                     raw_data=data
                 ))
 
+                # Mark that we've triggered an event for this session
+                self.key_event_triggered = True
+
+                if self.debug_mode:
+                    logger.debug(f"Triggered combo action: {combo_id}")
+
+        # Reset session when all buttons are released
+        if len(current_button_names) == 0:
+            self.peak_buttons_this_session = set()
+            # Only reset key_event_triggered if no events were generated in this function call
+            # This allows tests to check the flag immediately after events are generated
+            if not events:
+                self.key_event_triggered = False
+
         # Update state
-        self.previous_state['button_names'] = current_button_names
+        self.previous_state['button_names'] = list(current_button_names)
 
         return events
+
+    def _generate_combo_id(self, buttons: set) -> str:
+        """Generate a standardized combo ID from a set of buttons."""
+        if not buttons:
+            return ""
+
+        # Sort buttons to ensure consistent combo IDs regardless of order
+        sorted_buttons = sorted(list(buttons))
+        return "+".join(sorted_buttons)
+
+    def _should_check_combo_mapping(self, combo_id: str) -> bool:
+        """Determine if we should check for a combo mapping."""
+        if not combo_id:
+            return False
+
+        # Check if this combo mapping exists in the config
+        key_mappings = getattr(self.config, 'key_mappings', {})
+        return combo_id in key_mappings
 
     def _get_button_names_from_data(self, data: bytearray) -> List[str]:
         """ Get button names from data """

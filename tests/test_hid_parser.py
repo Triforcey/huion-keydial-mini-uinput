@@ -35,40 +35,53 @@ class TestHIDParser:
 
     @pytest.mark.hid_parser
     def test_parse_button_press_huion_format(self, hid_parser, hid_test_data):
-        """Test parsing button press using Huion format."""
+        """Test parsing button press using Huion format with combo system."""
+        # With combo system, button press alone doesn't generate events
         events = hid_parser.parse(hid_test_data.BUTTON_13_PRESS)
+        assert len(events) == 0  # No events on press alone
 
-        assert len(events) == 1
-        event = events[0]
-        assert event.event_type == EventType.KEY_PRESS
-        assert event.key_code == "BUTTON_13"
-        assert event.raw_data == hid_test_data.BUTTON_13_PRESS
+        # Events are generated on release
+        events = hid_parser.parse(hid_test_data.BUTTON_RELEASE)
+        assert len(events) == 2  # Both press and release events
+
+        assert events[0].event_type == EventType.KEY_PRESS
+        assert events[0].key_code == "BUTTON_13"
+        assert events[1].event_type == EventType.KEY_RELEASE
+        assert events[1].key_code == "BUTTON_13"
 
     @pytest.mark.hid_parser
     def test_parse_button_release_huion_format(self, hid_parser, hid_test_data):
-        """Test parsing button release using Huion format."""
-        # First press the button
-        hid_parser.parse(hid_test_data.BUTTON_13_PRESS)
+        """Test parsing button release using Huion format with combo system."""
+        # First press the button (no events yet)
+        press_events = hid_parser.parse(hid_test_data.BUTTON_13_PRESS)
+        assert len(press_events) == 0
 
-        # Then release it
+        # Then release it (generates both press and release events)
         events = hid_parser.parse(hid_test_data.BUTTON_RELEASE)
 
-        assert len(events) == 1
-        event = events[0]
-        assert event.event_type == EventType.KEY_RELEASE
-        assert event.key_code == "BUTTON_13"
+        assert len(events) == 2
+        assert events[0].event_type == EventType.KEY_PRESS
+        assert events[0].key_code == "BUTTON_13"
+        assert events[1].event_type == EventType.KEY_RELEASE
+        assert events[1].key_code == "BUTTON_13"
 
     @pytest.mark.hid_parser
     def test_parse_multiple_buttons(self, hid_parser, hid_test_data):
-        """Test parsing multiple button presses."""
-        events = hid_parser.parse(hid_test_data.MULTIPLE_BUTTONS)
+        """Test parsing multiple button presses as combo."""
+        # Multiple buttons pressed simultaneously create a combo
+        press_events = hid_parser.parse(hid_test_data.MULTIPLE_BUTTONS)
+        assert len(press_events) == 0  # No events on press alone
 
-        assert len(events) == 2
-        BUTTON_13_event = next(e for e in events if e.key_code == "BUTTON_13")
-        BUTTON_15_event = next(e for e in events if e.key_code == "BUTTON_15")
+        # Release generates combo events
+        events = hid_parser.parse(hid_test_data.BUTTON_RELEASE)
+        assert len(events) == 2  # Press and release for the combo
 
-        assert BUTTON_13_event.event_type == EventType.KEY_PRESS
-        assert BUTTON_15_event.event_type == EventType.KEY_PRESS
+        # Should generate combo ID for multiple buttons
+        assert events[0].event_type == EventType.KEY_PRESS
+        assert events[1].event_type == EventType.KEY_RELEASE
+        # Combo should be sorted button names
+        assert "+" in events[0].key_code  # Indicates it's a combo
+        assert events[0].key_code == events[1].key_code
 
     @pytest.mark.hid_parser
     def test_parse_dial_clockwise(self, hid_parser, hid_test_data):
@@ -131,24 +144,33 @@ class TestHIDParser:
 
     @pytest.mark.hid_parser
     def test_parse_type1_buttons(self, hid_parser, hid_test_data):
-        """Test parsing type 1 button format."""
-        events = hid_parser.parse(hid_test_data.BUTTON_1_PRESS)
+        """Test parsing type 1 button format with combo system."""
+        # Button press alone doesn't generate events in combo system
+        press_events = hid_parser.parse(hid_test_data.BUTTON_1_PRESS)
+        assert len(press_events) == 0
 
-        assert len(events) == 1
-        event = events[0]
-        assert event.event_type == EventType.KEY_PRESS
-        assert event.key_code == "BUTTON_1"
+        # Events generated on release
+        events = hid_parser.parse(hid_test_data.BUTTON_RELEASE)
+        assert len(events) == 2
+        assert events[0].event_type == EventType.KEY_PRESS
+        assert events[0].key_code == "BUTTON_1"
+        assert events[1].event_type == EventType.KEY_RELEASE
+        assert events[1].key_code == "BUTTON_1"
 
     @pytest.mark.hid_parser
     def test_parse_standard_hid_format(self, hid_parser, hid_test_data):
-        """Test parsing standard HID format."""
-        # Use type 1 button format instead
-        events = hid_parser.parse(hid_test_data.BUTTON_1_PRESS)
+        """Test parsing standard HID format with combo system."""
+        # Button press alone doesn't generate events in combo system
+        press_events = hid_parser.parse(hid_test_data.BUTTON_1_PRESS)
+        assert len(press_events) == 0
 
-        assert len(events) == 1
-        event = events[0]
-        assert event.event_type == EventType.KEY_PRESS
-        assert event.key_code == "BUTTON_1"
+        # Events generated on release
+        events = hid_parser.parse(hid_test_data.BUTTON_RELEASE)
+        assert len(events) == 2
+        assert events[0].event_type == EventType.KEY_PRESS
+        assert events[0].key_code == "BUTTON_1"
+        assert events[1].event_type == EventType.KEY_RELEASE
+        assert events[1].key_code == "BUTTON_1"
 
     @pytest.mark.hid_parser
     def test_parse_with_different_sensitivity(self, sample_config_data):
@@ -177,20 +199,22 @@ class TestHIDParser:
 
     @pytest.mark.hid_parser
     def test_parser_state_management(self, hid_parser, hid_test_data):
-        """Test that parser maintains state correctly."""
-        # Press button
+        """Test that parser maintains state correctly with combo system."""
+        # Press button (no events in combo system)
         events1 = hid_parser.parse(hid_test_data.BUTTON_13_PRESS)
-        assert len(events1) == 1
-        assert events1[0].event_type == EventType.KEY_PRESS
+        assert len(events1) == 0
 
-        # Press same button again (should not generate event)
+        # Press same button again (still no events, same state)
         events2 = hid_parser.parse(hid_test_data.BUTTON_13_PRESS)
         assert len(events2) == 0
 
-        # Release button
+        # Release button (generates both press and release events)
         events3 = hid_parser.parse(hid_test_data.BUTTON_RELEASE)
-        assert len(events3) == 1
-        assert events3[0].event_type == EventType.KEY_RELEASE
+        assert len(events3) == 2
+        assert events3[0].event_type == EventType.KEY_PRESS
+        assert events3[0].key_code == "BUTTON_13"
+        assert events3[1].event_type == EventType.KEY_RELEASE
+        assert events3[1].key_code == "BUTTON_13"
 
     @pytest.mark.hid_parser
     def test_reset_state(self, hid_parser, hid_test_data):
@@ -225,26 +249,34 @@ class TestHIDParser:
 
     @pytest.mark.hid_parser
     def test_parse_with_missing_key_mappings(self, sample_config_data):
-        """Test parsing with missing key mappings."""
+        """Test parsing with missing key mappings using combo system."""
         # Remove key mappings to test behavior
         del sample_config_data['key_mappings']
         config = Config(sample_config_data)
         parser = HIDParser(config)
 
-        # Test button press - should still work as it uses button names directly
-        events = parser.parse(bytearray([0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))
+        # Test button press (no immediate events in combo system)
+        press_events = parser.parse(bytearray([0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))
+        assert len(press_events) == 0
 
-        assert len(events) == 1
+        # Test button release (generates combo events)
+        events = parser.parse(bytearray([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))
+        assert len(events) == 2
+        assert events[0].event_type == EventType.KEY_PRESS
         assert events[0].key_code == "BUTTON_13"
+        assert events[1].event_type == EventType.KEY_RELEASE
+        assert events[1].key_code == "BUTTON_13"
 
     @pytest.mark.hid_parser
     def test_parse_dial_with_large_delta(self, hid_parser):
         """Test parsing dial rotation with large delta values."""
-        # Test with a large delta that should be capped
-        large_delta_data = bytearray([0x02, 0xFF, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x00])  # Large positive delta
+        # Test with a moderate delta value
+        # Dial format: f1[clicked][count][direction]0000000000
+        # For rotation: clicked=0x00, direction: 0x00=clockwise, 0xff=counter-clockwise
+        large_delta_data = bytearray([0xf1, 0x00, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00])  # 10 steps clockwise rotation
         events = hid_parser.parse(large_delta_data)
 
-        # Should generate events but capped at reasonable number
+        # Should generate events - 10 steps * 2 events per step = 20 events
         assert len(events) > 0
         assert len(events) <= 20  # Max 10 steps * 2 events per step
 

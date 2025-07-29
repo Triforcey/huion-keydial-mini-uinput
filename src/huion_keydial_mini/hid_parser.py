@@ -126,10 +126,8 @@ class HIDParser:
         if released_buttons and not self.key_event_triggered:
             # Check if we have a combo mapping for the peak button set
             combo_id = self._generate_combo_id(self.peak_buttons_this_session)
-            if combo_id and self._should_check_combo_mapping(combo_id):
-                if self.debug_mode:
-                    logger.debug(f"Checking combo mapping for: {combo_id}")
 
+            if combo_id and self._should_check_combo_mapping(combo_id):
                 # Generate combo events (press then release immediately)
                 events.append(InputEvent(
                     event_type=EventType.KEY_PRESS,
@@ -144,9 +142,6 @@ class HIDParser:
 
                 # Mark that we've triggered an event for this session
                 self.key_event_triggered = True
-
-                if self.debug_mode:
-                    logger.debug(f"Triggered combo action: {combo_id}")
 
         # Reset session when all buttons are released
         if len(current_button_names) == 0:
@@ -168,16 +163,17 @@ class HIDParser:
 
         # Sort buttons to ensure consistent combo IDs regardless of order
         sorted_buttons = sorted(list(buttons))
-        return "+".join(sorted_buttons)
+        combo_id = "+".join(sorted_buttons)
+        return combo_id
 
     def _should_check_combo_mapping(self, combo_id: str) -> bool:
         """Determine if we should check for a combo mapping."""
         if not combo_id:
             return False
 
-        # Check if this combo mapping exists in the config
-        key_mappings = getattr(self.config, 'key_mappings', {})
-        return combo_id in key_mappings
+        # Always generate events for valid combo IDs and let UInputHandler handle mapping lookup
+        # This is because keydialctl mappings are stored in KeybindManager, not config.key_mappings
+        return True
 
     def _get_button_names_from_data(self, data: bytearray) -> List[str]:
         """ Get button names from data """

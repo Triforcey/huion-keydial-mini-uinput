@@ -231,8 +231,12 @@ class TestComboHIDParser:
             assert result == expected, f"Combo {combo} should normalize to {expected}, got {result}"
 
     @pytest.mark.combo
-    def test_no_mapping_no_event(self, combo_parser, combo_test_data):
-        """Test that combinations without mappings don't generate events."""
+    def test_always_generates_events_for_valid_combos(self, combo_parser, combo_test_data):
+        """Test that HIDParser generates events for all valid combos.
+
+        Even without config mappings, HIDParser should generate events and let
+        UInputHandler handle the actual mapping lookup from KeybindManager.
+        """
         # Create parser without combo mappings
         no_combo_config = Config({
             'key_mappings': {
@@ -248,6 +252,11 @@ class TestComboHIDParser:
         parser._parse_button_events(combo_test_data.BUTTON_1_2)
         events = parser._parse_button_events(combo_test_data.BUTTON_1_ONLY)
 
-        # Should not generate combo events since no mapping exists
-        assert events == []
-        assert parser.key_event_triggered is False
+        # Should generate combo events even without config mapping
+        # UInputHandler will handle actual mapping lookup from KeybindManager
+        assert len(events) == 2
+        assert events[0].event_type == EventType.KEY_PRESS
+        assert events[0].key_code == 'BUTTON_1+BUTTON_2'
+        assert events[1].event_type == EventType.KEY_RELEASE
+        assert events[1].key_code == 'BUTTON_1+BUTTON_2'
+        assert parser.key_event_triggered is True

@@ -103,7 +103,7 @@ The driver uses automatic connection detection via DBus monitoring:
 ## Package Information
 
 - **Package Name**: `huion-keydial-mini-driver`
-- **Version**: 1.1.1
+- **Version**: 1.2.0
 - **Architecture**: Any (Python package)
 - **License**: MIT
 

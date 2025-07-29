@@ -34,49 +34,83 @@ def cli(ctx, config: Optional[str]):
     ctx.obj['config_path'] = config
 
 
+
+
 @cli.command()
-@click.argument('action_id', type=click.Choice([
-    'BUTTON_1', 'BUTTON_2', 'BUTTON_3', 'BUTTON_4',
-    'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8',
-    'BUTTON_9', 'BUTTON_10', 'BUTTON_11', 'BUTTON_12',
-    'BUTTON_13', 'BUTTON_14', 'BUTTON_15', 'BUTTON_16',
-    'BUTTON_17', 'BUTTON_18',
-    'DIAL_CW', 'DIAL_CCW', 'DIAL_CLICK'
-]))
+@click.argument('action_id')
 @click.argument('key_data')
 @click.pass_context
 def bind(ctx, action_id: str, key_data: str):
-    """Bind a keyboard action to a button or dial event.
+    """Bind a keyboard action to a button, button combination, or dial event.
 
-    ACTION_ID: Action identifier (BUTTON_1-8, DIAL_CW, DIAL_CCW, DIAL_CLICK)
+    ACTION_ID: Action identifier - individual buttons (BUTTON_1-18),
+               button combos (BUTTON_1+BUTTON_2), or dial actions (DIAL_CW, DIAL_CCW, DIAL_CLICK)
     KEY_DATA: Key data (e.g., "KEY_F1", "KEY_CTRL+KEY_C")
 
-    Note: You can also configure actions in the config file using the new format:
+    Examples:
+      keydialctl bind BUTTON_1 KEY_F1                    # Individual button
+      keydialctl bind BUTTON_1+BUTTON_2 KEY_CTRL+KEY_C  # Button combination
+      keydialctl bind DIAL_CW KEY_VOLUMEUP               # Dial action
 
-    BUTTON_1:
-      type: "keyboard"
-      keys: ["KEY_F1"]
-      description: "Button 1 -> F1"
-
-    BUTTON_2:
-      type: "keyboard"
-      keys: ["KEY_LEFTCTRL", "KEY_C"]
-      description: "Button 2 -> Copy"
+    Note: You can also configure actions in the config file using the new format.
     """
     async def do_bind():
         socket_path = get_socket_path()
+
+        # Validate action_id format
+        valid_buttons = [
+            'BUTTON_1', 'BUTTON_2', 'BUTTON_3', 'BUTTON_4',
+            'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8',
+            'BUTTON_9', 'BUTTON_10', 'BUTTON_11', 'BUTTON_12',
+            'BUTTON_13', 'BUTTON_14', 'BUTTON_15', 'BUTTON_16',
+            'BUTTON_17', 'BUTTON_18'
+        ]
+        valid_dial_actions = ['DIAL_CW', 'DIAL_CCW', 'DIAL_CLICK']
+
+        # Validate and normalize action_id
+        normalized_action_id = action_id  # Start with original
+
+        if action_id in valid_dial_actions:
+            # Valid dial action
+            pass
+        elif action_id in valid_buttons:
+            # Valid individual button
+            pass
+        elif '+' in action_id:
+            # Check if it's a valid combo
+            combo_buttons = [b.strip() for b in action_id.split('+')]
+
+            if len(combo_buttons) < 2:
+                click.echo("Error: Button combinations must include at least 2 buttons", err=True)
+                sys.exit(1)
+
+            for button in combo_buttons:
+                if button not in valid_buttons:
+                    click.echo(f"Error: Invalid button name '{button}' in combination", err=True)
+                    click.echo(f"Valid buttons: {', '.join(valid_buttons)}")
+                    sys.exit(1)
+
+            # Normalize combo format (sorted for consistency)
+            sorted_buttons = sorted(combo_buttons)
+            normalized_action_id = "+".join(sorted_buttons)
+        else:
+            click.echo(f"Error: Invalid action ID '{action_id}'", err=True)
+            click.echo(f"Valid individual buttons: {', '.join(valid_buttons)}")
+            click.echo(f"Valid dial actions: {', '.join(valid_dial_actions)}")
+            click.echo(f"Button combinations: BUTTON_1+BUTTON_2, etc.")
+            sys.exit(1)
 
         # Parse key data
         keys = [k.strip() for k in key_data.split('+')]
         action = {
             'type': 'keyboard',
             'keys': keys,
-            'description': f"{action_id} -> {key_data}"
+            'description': f"{normalized_action_id} -> {key_data}"
         }
 
         command = {
             'command': 'set_binding',
-            'action_id': action_id,
+            'action_id': normalized_action_id,
             'action': action
         }
 
@@ -91,27 +125,72 @@ def bind(ctx, action_id: str, key_data: str):
     asyncio.run(do_bind())
 
 
+
+
+
 @cli.command()
-@click.argument('action_id', type=click.Choice([
-    'BUTTON_1', 'BUTTON_2', 'BUTTON_3', 'BUTTON_4',
-    'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8',
-    'BUTTON_9', 'BUTTON_10', 'BUTTON_11', 'BUTTON_12',
-    'BUTTON_13', 'BUTTON_14', 'BUTTON_15', 'BUTTON_16',
-    'BUTTON_17', 'BUTTON_18',
-    'DIAL_CW', 'DIAL_CCW', 'DIAL_CLICK'
-]))
+@click.argument('action_id')
 @click.pass_context
 def unbind(ctx, action_id: str):
     """Remove binding for an action.
 
-    ACTION_ID: Action identifier (BUTTON_1-8, dial_clockwise, etc.)
+    ACTION_ID: Action identifier - individual buttons (BUTTON_1-18),
+               button combos (BUTTON_1+BUTTON_2), or dial actions (DIAL_CW, etc.)
+
+    Examples:
+      keydialctl unbind BUTTON_1                    # Remove individual button binding
+      keydialctl unbind BUTTON_1+BUTTON_2          # Remove button combination binding
+      keydialctl unbind DIAL_CW                     # Remove dial action binding
     """
     async def do_unbind():
         socket_path = get_socket_path()
 
+        # Validate and normalize action_id format (same logic as bind)
+        valid_buttons = [
+            'BUTTON_1', 'BUTTON_2', 'BUTTON_3', 'BUTTON_4',
+            'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8',
+            'BUTTON_9', 'BUTTON_10', 'BUTTON_11', 'BUTTON_12',
+            'BUTTON_13', 'BUTTON_14', 'BUTTON_15', 'BUTTON_16',
+            'BUTTON_17', 'BUTTON_18'
+        ]
+        valid_dial_actions = ['DIAL_CW', 'DIAL_CCW', 'DIAL_CLICK']
+
+        # Validate and normalize action_id
+        normalized_action_id = action_id  # Start with original
+
+        if action_id in valid_dial_actions:
+            # Valid dial action
+            pass
+        elif action_id in valid_buttons:
+            # Valid individual button
+            pass
+        elif '+' in action_id:
+            # Check if it's a valid combo
+            combo_buttons = [b.strip() for b in action_id.split('+')]
+
+            if len(combo_buttons) < 2:
+                click.echo("Error: Button combinations must include at least 2 buttons", err=True)
+                sys.exit(1)
+
+            for button in combo_buttons:
+                if button not in valid_buttons:
+                    click.echo(f"Error: Invalid button name '{button}' in combination", err=True)
+                    click.echo(f"Valid buttons: {', '.join(valid_buttons)}")
+                    sys.exit(1)
+
+            # Normalize combo format (sorted for consistency)
+            sorted_buttons = sorted(combo_buttons)
+            normalized_action_id = "+".join(sorted_buttons)
+        else:
+            click.echo(f"Error: Invalid action ID '{action_id}'", err=True)
+            click.echo(f"Valid individual buttons: {', '.join(valid_buttons)}")
+            click.echo(f"Valid dial actions: {', '.join(valid_dial_actions)}")
+            click.echo(f"Button combinations: BUTTON_1+BUTTON_2, etc.")
+            sys.exit(1)
+
         command = {
             'command': 'remove_binding',
-            'action_id': action_id
+            'action_id': normalized_action_id
         }
 
         response = await send_command(socket_path, command)
@@ -145,24 +224,63 @@ def list_bindings(ctx):
                 click.echo("No bindings configured")
                 return
 
+            # Separate combos from individual bindings
+            individual_bindings = {}
+            combo_bindings = {}
+            dial_bindings = {}
+
+            for action_id, action_data in bindings.items():
+                if '+' in action_id and not action_id.startswith('DIAL'):
+                    combo_bindings[action_id] = action_data
+                elif action_id.startswith('DIAL'):
+                    dial_bindings[action_id] = action_data
+                else:
+                    individual_bindings[action_id] = action_data
+
             click.echo("Current bindings:")
             click.echo()
 
-            for action_id, action_data in bindings.items():
-                action_type = action_data['type']
-                description = action_data.get('description', 'No description')
+            # Show individual button bindings
+            if individual_bindings:
+                click.echo("Individual buttons:")
+                for action_id, action_data in sorted(individual_bindings.items()):
+                    action_type = action_data['type']
 
-                if action_type == 'keyboard':
-                    keys = '+'.join(action_data['keys']) if action_data['keys'] else 'none'
-                    click.echo(f"  {action_id}: {keys} ({action_type})")
-                elif action_type == 'mouse':
-                    if action_data['mouse_action'] == 'scroll':
-                        click.echo(f"  {action_id}: mouse scroll ({action_type})")
-                    elif action_data['mouse_action'] == 'click':
-                        button = action_data['mouse_button']
-                        click.echo(f"  {action_id}: {button} click ({action_type})")
-                else:
-                    click.echo(f"  {action_id}: {description} ({action_type})")
+                    if action_type == 'keyboard':
+                        keys = '+'.join(action_data['keys']) if action_data['keys'] else 'none'
+                        click.echo(f"  {action_id}: {keys}")
+                    else:
+                        description = action_data.get('description', 'No description')
+                        click.echo(f"  {action_id}: {description}")
+                click.echo()
+
+            # Show combo bindings
+            if combo_bindings:
+                click.echo("Button combinations:")
+                for action_id, action_data in sorted(combo_bindings.items()):
+                    action_type = action_data['type']
+
+                    if action_type == 'keyboard':
+                        keys = '+'.join(action_data['keys']) if action_data['keys'] else 'none'
+                        click.echo(f"  {action_id}: {keys}")
+                    else:
+                        description = action_data.get('description', 'No description')
+                        click.echo(f"  {action_id}: {description}")
+                click.echo()
+
+            # Show dial bindings
+            if dial_bindings:
+                click.echo("Dial actions:")
+                for action_id, action_data in sorted(dial_bindings.items()):
+                    action_type = action_data['type']
+
+                    if action_type == 'keyboard':
+                        keys = '+'.join(action_data['keys']) if action_data['keys'] else 'none'
+                        click.echo(f"  {action_id}: {keys}")
+                    else:
+                        description = action_data.get('description', 'No description')
+                        click.echo(f"  {action_id}: {description}")
+                click.echo()
         else:
             # Fallback to config file if service is not running
             click.echo(f"Service not running: {response['message']}")

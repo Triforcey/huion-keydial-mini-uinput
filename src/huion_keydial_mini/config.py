@@ -92,11 +92,11 @@ class Config:
         mappings = self.data.get('key_mappings', {})
         if not isinstance(mappings, dict):
             return {}
-        # Ensure all values are strings with proper type checking
+        # Ensure all keys and values are strings with proper type checking
         result: Dict[str, str] = {}
         for k, v in mappings.items():
-            if isinstance(k, str) and v is not None:
-                result[k] = str(v)
+            if isinstance(k, str) and isinstance(v, str) and v:
+                result[k] = v
         return result
 
     @property

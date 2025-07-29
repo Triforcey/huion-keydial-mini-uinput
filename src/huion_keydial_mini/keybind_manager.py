@@ -65,13 +65,23 @@ class KeybindManager:
 
     def _load_initial_bindings(self):
         """Load initial keybindings from config."""
-        # Load button mappings
-        for button, key in self.config.key_mappings.items():
-            if key:
-                self.keybind_map[button] = KeybindAction(
+        # Load button mappings (including combos!)
+        for action_id, key in self.config.key_mappings.items():
+            # Type validation: both key and value must be strings
+            if not isinstance(action_id, str):
+                logger.warning(f"Config: Action ID must be a string, ignoring: {action_id}")
+                continue
+            if not isinstance(key, str) or not key:
+                logger.warning(f"Config: Key mapping must be a non-empty string, ignoring: {action_id} -> {key}")
+                continue
+
+            # Validate and normalize action_id (same logic as CLI)
+            normalized_action_id = self._validate_and_normalize_action_id(action_id)
+            if normalized_action_id:
+                self.keybind_map[normalized_action_id] = KeybindAction(
                     type=EventType.KEYBOARD,
                     keys=[k.strip() for k in key.split('+')],
-                    description=f"Button {button} -> {key}"
+                    description=f"{normalized_action_id} -> {key}"
                 )
 
         # Load dial settings
@@ -98,6 +108,49 @@ class KeybindManager:
             )
 
         logger.info(f"Loaded {len(self.keybind_map)} initial keybindings")
+
+    def _validate_and_normalize_action_id(self, action_id: str) -> Optional[str]:
+        """Validate and normalize an action ID from config file."""
+        valid_buttons = [
+            'BUTTON_1', 'BUTTON_2', 'BUTTON_3', 'BUTTON_4',
+            'BUTTON_5', 'BUTTON_6', 'BUTTON_7', 'BUTTON_8',
+            'BUTTON_9', 'BUTTON_10', 'BUTTON_11', 'BUTTON_12',
+            'BUTTON_13', 'BUTTON_14', 'BUTTON_15', 'BUTTON_16',
+            'BUTTON_17', 'BUTTON_18'
+        ]
+        valid_dial_actions = ['DIAL_CW', 'DIAL_CCW', 'DIAL_CLICK']
+
+        # Check if it's a valid action_id
+        if action_id in valid_dial_actions:
+            # Valid dial action
+            return action_id
+        elif action_id in valid_buttons:
+            # Valid individual button
+            return action_id
+        elif '+' in action_id:
+            # Check if it's a valid combo
+            combo_buttons = [b.strip() for b in action_id.split('+')]
+
+            if len(combo_buttons) < 2:
+                logger.warning(f"Config: Button combinations must include at least 2 buttons, ignoring: {action_id}")
+                return None
+
+            # Check for duplicate buttons
+            if len(combo_buttons) != len(set(combo_buttons)):
+                logger.warning(f"Config: Button combinations cannot contain duplicate buttons, ignoring: {action_id}")
+                return None
+
+            for button in combo_buttons:
+                if button not in valid_buttons:
+                    logger.warning(f"Config: Invalid button name '{button}' in combination '{action_id}', ignoring")
+                    return None
+
+            # Normalize combo format (sorted for consistency)
+            sorted_buttons = sorted(combo_buttons)
+            return "+".join(sorted_buttons)
+        else:
+            logger.warning(f"Config: Invalid action ID '{action_id}', ignoring")
+            return None
 
     async def start_socket_server(self):
         """Start the Unix socket server for control interface."""
@@ -254,6 +307,45 @@ class KeybindManager:
     def get_all_actions(self) -> Dict[str, KeybindAction]:
         """Get all current keybind actions."""
         return self.keybind_map.copy()
+
+    def has_combo_mapping(self, combo_id: str) -> bool:
+        """Check if a combo mapping exists."""
+        return combo_id in self.keybind_map
+
+    def is_combo_action(self, action_id: str) -> bool:
+        """Check if an action ID represents a combo (contains '+')."""
+        return '+' in action_id
+
+    def set_combo_action(self, buttons: List[str], keys: List[str], description: Optional[str] = None):
+        """Set a combo action from a list of buttons and target keys."""
+        # Generate combo ID by sorting button names
+        sorted_buttons = sorted(buttons)
+        combo_id = "+".join(sorted_buttons)
+
+        action = KeybindAction(
+            type=EventType.KEYBOARD,
+            keys=keys,
+            description=description or f"Combo {combo_id} -> {'+'.join(keys)}"
+        )
+
+        self.set_action(combo_id, action)
+        return combo_id
+
+    def get_combo_mappings(self) -> Dict[str, KeybindAction]:
+        """Get all combo mappings (action IDs containing '+')."""
+        return {
+            action_id: action
+            for action_id, action in self.keybind_map.items()
+            if self.is_combo_action(action_id)
+        }
+
+    def get_individual_mappings(self) -> Dict[str, KeybindAction]:
+        """Get all individual button mappings (action IDs not containing '+')."""
+        return {
+            action_id: action
+            for action_id, action in self.keybind_map.items()
+            if not self.is_combo_action(action_id)
+        }
 
 
 # Client-side functions for keydialctl

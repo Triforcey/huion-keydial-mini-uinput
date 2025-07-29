@@ -77,6 +77,7 @@ markers = [
     "unit: Unit tests",
     "integration: Integration tests",
     "hid_parser: HID parser specific tests",
+    "combo: Button combo functionality tests",
 ]
 
 [tool.coverage.run]

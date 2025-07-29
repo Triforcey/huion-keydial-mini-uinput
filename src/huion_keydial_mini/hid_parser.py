@@ -42,6 +42,11 @@ class HIDParser:
         self.peak_buttons_this_session = set()  # Track peak button set for combo detection
         self.key_event_triggered = False  # Flag to prevent multiple actions per session
 
+        # Sticky state tracking
+        self.active_sticky_buttons = set()  # Track which buttons have active sticky bindings
+        self.active_sticky_actions = {}  # Track action_id -> buttons for active sticky actions
+        self.keybind_manager = None  # Will be set by the main application
+
     def parse(self, data: bytearray, characteristic_uuid: Optional[str] = None) -> List[InputEvent]:
         """Parse HID data and return input events."""
         events = []
@@ -78,6 +83,17 @@ class HIDParser:
 
         return events
 
+    def set_keybind_manager(self, keybind_manager):
+        """Set the keybind manager for sticky binding detection."""
+        self.keybind_manager = keybind_manager
+
+    def _is_sticky_binding(self, action_id: str) -> bool:
+        """Check if a binding is sticky."""
+        if not self.keybind_manager:
+            return False
+        action = self.keybind_manager.get_action(action_id)
+        return action and action.sticky if action else False
+
     def _extract_handle_from_uuid(self, uuid: str) -> str:
         """Extract handle from characteristic UUID."""
         # UUID format: "0000001f-0000-1000-8000-00805f9b34fb"
@@ -88,66 +104,118 @@ class HIDParser:
         return ""
 
     def _parse_button_events(self, data: bytearray) -> List[InputEvent]:
-        """Parse button events with combo detection support."""
+        """Parse button events with unified individual/combo detection and sticky functionality."""
         events = []
 
         if len(data) < 8:
             return events
 
         # Validate that this is actually button data (not dial data)
-        # Button data should NOT start with 0xf1 (which is dial data)
         if data[0] == 0xf1:
-            # Not button data
             return events
 
-        # Get current button names from data
+        # Get current and previous button states
         current_button_names = set(self._get_button_names_from_data(data))
-
-        # Get previous button state
         previous_button_names = set(self.previous_state.get('button_names', []))
 
         # Find pressed and released buttons
         pressed_buttons = current_button_names - previous_button_names
         released_buttons = previous_button_names - current_button_names
 
-        # Update peak button set and handle session resets
+        # Handle button presses - update session state
         if pressed_buttons:
-            # Any new button press resets the event trigger flag to allow new combos
-            # This enables rapid-fire combos: hold BUTTON_1, press BUTTON_2, release BUTTON_2 (triggers combo),
-            # press BUTTON_3, release BUTTON_3 (triggers different combo), all while BUTTON_1 is held
+            # Any new button press resets the event trigger flag
             self.key_event_triggered = False
 
             # Update peak button set if needed
             if current_button_names != self.peak_buttons_this_session:
-                # Different button combination (including new peaks), update peak set
                 self.peak_buttons_this_session = current_button_names.copy()
 
-        # Handle button releases - this is where combo detection happens
+        # Handle button releases - this is where all actions are triggered
         if released_buttons and not self.key_event_triggered:
-            # Check if we have a combo mapping for the peak button set
-            combo_id = self._generate_combo_id(self.peak_buttons_this_session)
+            # First, handle any active sticky action releases
+            sticky_released = False
+            for action_id, action_buttons in list(self.active_sticky_actions.items()):
+                # Check if any buttons from this sticky action are being released
+                if released_buttons & action_buttons:
+                    # Generate release event for this sticky action
+                    events.append(InputEvent(
+                        event_type=EventType.KEY_RELEASE,
+                        key_code=action_id,
+                        raw_data=data
+                    ))
+                    logger.debug(f"Sticky action released: {action_id}")
 
-            if combo_id and self._should_check_combo_mapping(combo_id):
-                # Generate combo events (press then release immediately)
-                events.append(InputEvent(
-                    event_type=EventType.KEY_PRESS,
-                    key_code=combo_id,
-                    raw_data=data
-                ))
-                events.append(InputEvent(
-                    event_type=EventType.KEY_RELEASE,
-                    key_code=combo_id,
-                    raw_data=data
-                ))
+                    # Remove released buttons from tracking
+                    remaining_buttons = action_buttons - released_buttons
+                    if remaining_buttons:
+                        # Some buttons still pressed for this action
+                        self.active_sticky_actions[action_id] = remaining_buttons
+                        # Update active_sticky_buttons to reflect what's still active
+                        for button in released_buttons:
+                            if button in self.active_sticky_buttons:
+                                self.active_sticky_buttons.remove(button)
+                    else:
+                        # All buttons for this action released
+                        del self.active_sticky_actions[action_id]
+                        # Remove all buttons for this action from active tracking
+                        for button in action_buttons:
+                            if button in self.active_sticky_buttons:
+                                self.active_sticky_buttons.remove(button)
 
-                # Mark that we've triggered an event for this session
-                self.key_event_triggered = True
+                    sticky_released = True
+                    self.key_event_triggered = True
+
+            # Handle regular (non-sticky) action if no sticky action was released
+            if not sticky_released:
+                # Generate action ID from peak button set
+                action_id = self._generate_combo_id(self.peak_buttons_this_session)
+
+                if action_id and self._should_check_combo_mapping(action_id) and not self._is_sticky_binding(action_id):
+                    # Handle non-sticky binding (momentary action on release)
+                    if not self.active_sticky_buttons:  # Only if no sticky buttons are active
+                        events.append(InputEvent(
+                            event_type=EventType.KEY_PRESS,
+                            key_code=action_id,
+                            raw_data=data
+                        ))
+                        events.append(InputEvent(
+                            event_type=EventType.KEY_RELEASE,
+                            key_code=action_id,
+                            raw_data=data
+                        ))
+                        logger.debug(f"Action triggered: {action_id}")
+                        self.key_event_triggered = True
+                    else:
+                        logger.debug(f"Blocking action {action_id} due to active sticky bindings")
+
+        # Handle sticky button presses (generate press events when buttons are first pressed)
+        if pressed_buttons:
+            # Check if the current action (from current button state) is sticky
+            current_action_id = self._generate_combo_id(current_button_names)
+            if current_action_id and self._is_sticky_binding(current_action_id):
+                # Only activate if no sticky actions are currently active
+                if not self.active_sticky_actions:
+                    # Generate press event for sticky action
+                    events.append(InputEvent(
+                        event_type=EventType.KEY_PRESS,
+                        key_code=current_action_id,
+                        raw_data=data
+                    ))
+                    # Track this sticky action and its buttons
+                    self.active_sticky_actions[current_action_id] = current_button_names.copy()
+                    # Track which individual buttons are part of sticky actions
+                    for button in current_button_names:
+                        self.active_sticky_buttons.add(button)
+                    logger.debug(f"Sticky action pressed: {current_action_id}")
+                else:
+                    logger.debug(f"Blocking sticky action {current_action_id} - sticky action already active")
 
         # Reset session when all buttons are released
         if len(current_button_names) == 0:
             self.peak_buttons_this_session = set()
-            # Only reset key_event_triggered if no events were generated in this function call
-            # This allows tests to check the flag immediately after events are generated
+            self.active_sticky_buttons = set()
+            self.active_sticky_actions = {}
             if not events:
                 self.key_event_triggered = False
 

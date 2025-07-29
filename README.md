@@ -87,7 +87,7 @@ systemctl --user enable --now huion-keydial-mini-user.service
 **Combo Actions:**
 - Mixed keyboard/mouse actions (future enhancement)
 
-**Stick Actions:**
+**Sticky Actions:**
 - Key bindings can be set as 'sticky', meaning they press and hold until released.
 - Sticky key bindings block other key bindings from being triggered until they are released.
 

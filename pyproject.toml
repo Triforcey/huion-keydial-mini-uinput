@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "huion-keydial-mini-driver"
-version = "1.1.1"
+version = "1.2.0"
 description = "User space driver for Huion Keydial Mini bluetooth device"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -78,6 +78,7 @@ markers = [
     "integration: Integration tests",
     "hid_parser: HID parser specific tests",
     "combo: Button combo functionality tests",
+    "keybind_manager: Keybind manager functionality tests",
 ]
 
 [tool.coverage.run]

@@ -22,6 +22,7 @@ class Config:
             'bluetooth': {},
             'uinput': {},
             'key_mappings': {},
+            'sticky_key_mappings': {},
             'dial_settings': {},
         }
 
@@ -93,6 +94,18 @@ class Config:
         if not isinstance(mappings, dict):
             return {}
         # Ensure all keys and values are strings with proper type checking
+        result: Dict[str, str] = {}
+        for k, v in mappings.items():
+            if isinstance(k, str) and isinstance(v, str) and v:
+                result[k] = v
+        return result
+
+    @property
+    def sticky_key_mappings(self) -> Dict[str, str]:
+        """Get the sticky key mappings configuration."""
+        mappings = self.data.get('sticky_key_mappings', {})
+        if not isinstance(mappings, dict):
+            return {}
         result: Dict[str, str] = {}
         for k, v in mappings.items():
             if isinstance(k, str) and isinstance(v, str) and v:
@@ -221,6 +234,7 @@ class Config:
                 'device_name': 'huion-keydial-mini-uinput',
             },
             'key_mappings': {},
+            'sticky_key_mappings': {},
             'dial_settings': {},
         }
 
@@ -244,6 +258,7 @@ class Config:
             _ = self.auto_reconnect
             _ = self.uinput_device_name
             _ = self.key_mappings
+            _ = self.sticky_key_mappings
             _ = self.dial_settings
             return True
         except Exception:
@@ -266,5 +281,6 @@ class Config:
                 'device_name': self.uinput_device_name,
             },
             'key_mappings': self.key_mappings,
+            'sticky_key_mappings': self.sticky_key_mappings,
             'dial_settings': self.dial_settings,
         }

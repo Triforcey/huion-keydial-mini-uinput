@@ -57,6 +57,9 @@ class HuionKeydialMini:
         self.hid_parser = HIDParser(config)
         self.uinput_handler = UInputHandler(config, self.keybind_manager)
 
+        # Connect keybind manager to hid parser for sticky functionality
+        self.hid_parser.set_keybind_manager(self.keybind_manager)
+
         # Initialize Bluetooth watcher for automatic connection detection
         self.bluetooth_watcher: Optional[BluetoothWatcher] = None
         self.watcher_task: Optional[asyncio.Task] = None

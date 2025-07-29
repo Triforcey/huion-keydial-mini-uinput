@@ -39,8 +39,9 @@ def cli(ctx, config: Optional[str]):
 @cli.command()
 @click.argument('action_id')
 @click.argument('key_data')
+@click.option('--sticky', is_flag=True, default=False, help='Make this a sticky key binding that holds until released')
 @click.pass_context
-def bind(ctx, action_id: str, key_data: str):
+def bind(ctx, action_id: str, key_data: str, sticky: bool):
     """Bind a keyboard action to a button, button combination, or dial event.
 
     ACTION_ID: Action identifier - individual buttons (BUTTON_1-18),
@@ -51,6 +52,7 @@ def bind(ctx, action_id: str, key_data: str):
       keydialctl bind BUTTON_1 KEY_F1                    # Individual button
       keydialctl bind BUTTON_1+BUTTON_2 KEY_CTRL+KEY_C  # Button combination
       keydialctl bind DIAL_CW KEY_VOLUMEUP               # Dial action
+      keydialctl bind --sticky BUTTON_1 KEY_F1          # Sticky key binding
 
     Note: You can also configure actions in the config file using the new format.
     """
@@ -105,7 +107,8 @@ def bind(ctx, action_id: str, key_data: str):
         action = {
             'type': 'keyboard',
             'keys': keys,
-            'description': f"{normalized_action_id} -> {key_data}"
+            'sticky': sticky,
+            'description': f"{normalized_action_id} -> {key_data}" + (" (sticky)" if sticky else "")
         }
 
         command = {
@@ -245,13 +248,14 @@ def list_bindings(ctx):
                 click.echo("Individual buttons:")
                 for action_id, action_data in sorted(individual_bindings.items()):
                     action_type = action_data['type']
+                    sticky_text = " (sticky)" if action_data.get('sticky', False) else ""
 
                     if action_type == 'keyboard':
                         keys = '+'.join(action_data['keys']) if action_data['keys'] else 'none'
-                        click.echo(f"  {action_id}: {keys}")
+                        click.echo(f"  {action_id}: {keys}{sticky_text}")
                     else:
                         description = action_data.get('description', 'No description')
-                        click.echo(f"  {action_id}: {description}")
+                        click.echo(f"  {action_id}: {description}{sticky_text}")
                 click.echo()
 
             # Show combo bindings
@@ -259,13 +263,14 @@ def list_bindings(ctx):
                 click.echo("Button combinations:")
                 for action_id, action_data in sorted(combo_bindings.items()):
                     action_type = action_data['type']
+                    sticky_text = " (sticky)" if action_data.get('sticky', False) else ""
 
                     if action_type == 'keyboard':
                         keys = '+'.join(action_data['keys']) if action_data['keys'] else 'none'
-                        click.echo(f"  {action_id}: {keys}")
+                        click.echo(f"  {action_id}: {keys}{sticky_text}")
                     else:
                         description = action_data.get('description', 'No description')
-                        click.echo(f"  {action_id}: {description}")
+                        click.echo(f"  {action_id}: {description}{sticky_text}")
                 click.echo()
 
             # Show dial bindings
@@ -273,13 +278,14 @@ def list_bindings(ctx):
                 click.echo("Dial actions:")
                 for action_id, action_data in sorted(dial_bindings.items()):
                     action_type = action_data['type']
+                    sticky_text = " (sticky)" if action_data.get('sticky', False) else ""
 
                     if action_type == 'keyboard':
                         keys = '+'.join(action_data['keys']) if action_data['keys'] else 'none'
-                        click.echo(f"  {action_id}: {keys}")
+                        click.echo(f"  {action_id}: {keys}{sticky_text}")
                     else:
                         description = action_data.get('description', 'No description')
-                        click.echo(f"  {action_id}: {description}")
+                        click.echo(f"  {action_id}: {description}{sticky_text}")
                 click.echo()
         else:
             # Fallback to config file if service is not running

@@ -1,9 +1,13 @@
 """Configuration management for the Huion Keydial Mini driver."""
 
+import logging
 import os
 import yaml
 from typing import Optional, Dict, Any, Union, cast
 from pathlib import Path
+
+
+logger = logging.getLogger(__name__)
 
 
 class Config:
@@ -248,21 +252,20 @@ class Config:
 
     def validate(self) -> bool:
         """Validate the current configuration."""
-        try:
-            # Test all property accessors to ensure they work
-            _ = self.device_address
-            _ = self.device_name
-            _ = self.scan_timeout
-            _ = self.connection_timeout
-            _ = self.reconnect_attempts
-            _ = self.auto_reconnect
-            _ = self.uinput_device_name
-            _ = self.key_mappings
-            _ = self.sticky_key_mappings
-            _ = self.dial_settings
-            return True
-        except Exception:
-            return False
+        valid = True
+        properties = [
+            'device_address', 'device_name', 'scan_timeout',
+            'connection_timeout', 'reconnect_attempts', 'auto_reconnect',
+            'uinput_device_name', 'key_mappings', 'sticky_key_mappings',
+            'dial_settings',
+        ]
+        for prop in properties:
+            try:
+                getattr(self, prop)
+            except Exception as e:
+                logger.error(f"Config validation failed for '{prop}': {e}")
+                valid = False
+        return valid
 
     def get_effective_config(self) -> Dict[str, Any]:
         """Get the effective configuration with all type casting applied."""

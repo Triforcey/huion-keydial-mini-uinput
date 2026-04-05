@@ -196,7 +196,7 @@ class KeybindManager:
         """Handle client connection to the control socket."""
         try:
             # Read command
-            data = await reader.read(1024)
+            data = await reader.read(4096)
             if not data:
                 return
 
@@ -213,10 +213,18 @@ class KeybindManager:
             await writer.drain()
         except Exception as e:
             logger.error(f"Error handling client command: {e}")
-            error_response = {'status': 'error', 'message': str(e)}
-            writer.write((json.dumps(error_response) + '\n').encode('utf-8'))
-            await writer.drain()
-        # Don't close the connection here - let the client close it
+            try:
+                error_response = {'status': 'error', 'message': str(e)}
+                writer.write((json.dumps(error_response) + '\n').encode('utf-8'))
+                await writer.drain()
+            except Exception:
+                pass
+        finally:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
 
     async def _process_command(self, command: Dict[str, Any]) -> Dict[str, Any]:
         """Process a control command."""

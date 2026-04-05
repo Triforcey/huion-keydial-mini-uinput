@@ -167,8 +167,9 @@ class BluetoothWatcher:
                 if interface_name == "org.bluez.Device1":
                     if self.debug_mode:
                         logger.debug(f"Processing Device1 property change for {mac_address}")
-                    # Schedule the async handler
-                    asyncio.create_task(self._handle_device_property_change(mac_address, changed_properties))
+                    # Schedule the async handler with error logging
+                    task = asyncio.create_task(self._handle_device_property_change(mac_address, changed_properties))
+                    task.add_done_callback(self._task_done_callback)
                 elif self.debug_mode:
                     logger.debug(f"Ignoring signal for interface: {interface_name}")
 
@@ -177,6 +178,14 @@ class BluetoothWatcher:
             if self.debug_mode:
                 import traceback
                 logger.debug(traceback.format_exc())
+
+    def _task_done_callback(self, task: asyncio.Task):
+        """Log exceptions from fire-and-forget async tasks."""
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc:
+            logger.error(f"Error in async task: {exc}")
 
     async def _handle_device_property_change(self, mac_address: str, changed_properties: Dict[str, Any]):
         """Handle device property changes."""

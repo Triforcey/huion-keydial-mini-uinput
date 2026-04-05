@@ -112,7 +112,7 @@ class HuionKeydialMini:
                 logger.warning(f"Error disconnecting: {e}")
 
         if self.uinput_handler:
-            pass
+            self.uinput_handler.close()
 
         if self.keybind_manager:
             await self.keybind_manager.stop_socket_server()

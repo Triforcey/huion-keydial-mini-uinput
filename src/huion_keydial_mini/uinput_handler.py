@@ -347,6 +347,17 @@ class UInputHandler:
         """Get list of supported key names."""
         return list(self.KEY_MAPPING.keys())
 
+    def close(self):
+        """Close the uinput device and release resources."""
+        if self.device:
+            try:
+                self.device.close()
+                logger.info("Closed uinput device")
+            except Exception as e:
+                logger.warning(f"Error closing uinput device: {e}")
+            finally:
+                self.device = None
+
     def set_keybind_manager(self, keybind_manager: KeybindManager):
         """Set the keybind manager and rebuild capabilities."""
         self.keybind_manager = keybind_manager

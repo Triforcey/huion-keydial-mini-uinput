@@ -15,6 +15,12 @@ A Linux driver for the Huion Keydial Mini device that provides HID over GATT sup
 
 ## Installation
 
+### NixOS
+
+See [NIXOS.md](./NIXOS.md) for NixOS-specific installation instructions using the provided flake.
+
+### Other Linux Distributions
+
 ```bash
 # Clone the repository
 git clone https://github.com/Triforcey/huion-keydial-mini-uinput.git

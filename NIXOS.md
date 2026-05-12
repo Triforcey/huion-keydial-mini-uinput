@@ -59,18 +59,6 @@ You can also install just the package without the module:
 }
 ```
 
-### Method 3: Local Development/Testing
-
-For local testing without adding to your system configuration:
-
-```bash
-# Build the package
-nix build .#huion-keydial-mini-driver
-
-# Run directly
-nix run .#huion-keydial-mini-driver
-```
-
 ## Post-Installation Steps
 
 1. **Copy the default configuration:**

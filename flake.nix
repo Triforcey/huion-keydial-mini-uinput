@@ -1,5 +1,5 @@
 {
-  description = "A Nix-flake-based Python development environment";
+  description = "User space driver for Huion Keydial Mini bluetooth device";
 
   inputs.nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1"; # unstable Nixpkgs
 
@@ -42,6 +42,125 @@
       version = "3.13";
     in
     {
+      packages = forEachSupportedSystem (
+        { pkgs, system }:
+        {
+          default = self.packages.${system}.huion-keydial-mini-driver;
+
+          huion-keydial-mini-driver = pkgs.python3Packages.buildPythonApplication {
+            pname = "huion-keydial-mini-driver";
+            version = "1.2.0";
+
+            src = ./.;
+
+            pyproject = true;
+
+            build-system = with pkgs.python3Packages; [
+              setuptools
+              wheel
+            ];
+
+            dependencies = with pkgs.python3Packages; [
+              bleak
+              evdev
+              click
+              pyyaml
+              dbus-next
+            ];
+
+            nativeCheckInputs = with pkgs.python3Packages; [
+              pytest
+              pytest-asyncio
+              pytest-cov
+              pytest-mock
+            ];
+
+            doCheck = false; # Disable tests for now, can enable if needed
+
+            postInstall = ''
+              # Install systemd user service
+              install -Dm644 ${./packaging/systemd/huion-keydial-mini-user.service} \
+                $out/lib/systemd/user/huion-keydial-mini-user.service
+
+              # Install udev rules
+              install -Dm644 ${./packaging/udev/99-huion-keydial-mini.rules} \
+                $out/lib/udev/rules.d/99-huion-keydial-mini.rules
+
+              # Install udev helper script
+              install -Dm755 ${./packaging/udev/unbind-huion.sh} \
+                $out/bin/unbind-huion.sh
+
+              # Install default config
+              install -Dm644 ${./packaging/config.yaml.default} \
+                $out/etc/huion-keydial-mini/config.yaml
+
+              # Install documentation
+              install -Dm644 ${./README.md} \
+                $out/share/doc/huion-keydial-mini-driver/README.md
+
+              # Install license
+              install -Dm644 ${./LICENSE} \
+                $out/share/licenses/huion-keydial-mini-driver/LICENSE
+
+              # Install systemd user preset
+              install -Dm644 ${
+                pkgs.writeText "99-huion-keydial-mini.preset" ''
+                  # Enable huion-keydial-mini-user service
+                  enable huion-keydial-mini-user.service
+                ''
+              } $out/lib/systemd/user-preset/99-huion-keydial-mini.preset
+            '';
+
+            meta = with lib; {
+              description = "User space driver for Huion Keydial Mini bluetooth device";
+              homepage = "https://github.com/Triforcey/huion-keydial-mini-uinput";
+              license = licenses.mit;
+              maintainers = [ ];
+              platforms = platforms.linux;
+            };
+          };
+        }
+      );
+
+      # NixOS module for easy system integration
+      nixosModules.default =
+        {
+          config,
+          lib,
+          pkgs,
+          ...
+        }:
+        let
+          cfg = config.services.huion-keydial-mini;
+        in
+        {
+          options.services.huion-keydial-mini = {
+            enable = lib.mkEnableOption "Huion Keydial Mini driver";
+
+            package = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${pkgs.system}.huion-keydial-mini-driver;
+              description = "The huion-keydial-mini-driver package to use";
+            };
+          };
+
+          config = lib.mkIf cfg.enable {
+            environment.systemPackages = [ cfg.package ];
+
+            # Install udev rules
+            services.udev.packages = [ cfg.package ];
+
+            # Ensure bluez is enabled
+            hardware.bluetooth.enable = true;
+
+            # Add users to input group (users need to be specified in their own config)
+            users.groups.input = { };
+
+            # Make systemd user service available
+            systemd.packages = [ cfg.package ];
+          };
+        };
+
       devShells = forEachSupportedSystem (
         { pkgs, system }:
         let

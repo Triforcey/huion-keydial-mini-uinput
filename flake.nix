@@ -132,6 +132,17 @@
         }:
         let
           cfg = config.services.huion-keydial-mini;
+
+          # Create a patched udev rules package with correct paths
+          udevRulesPackage = pkgs.runCommand "huion-keydial-mini-udev-rules" {} ''
+            mkdir -p $out/lib/udev/rules.d
+
+            # Substitute the unbind-huion.sh path with the correct store path
+            ${pkgs.gnused}/bin/sed \
+              "s|/usr/local/bin/unbind-huion.sh|${cfg.package}/bin/unbind-huion.sh|g" \
+              ${cfg.package}/lib/udev/rules.d/99-huion-keydial-mini.rules \
+              > $out/lib/udev/rules.d/99-huion-keydial-mini.rules
+          '';
         in
         {
           options.services.huion-keydial-mini = {
@@ -147,8 +158,8 @@
           config = lib.mkIf cfg.enable {
             environment.systemPackages = [ cfg.package ];
 
-            # Install udev rules
-            services.udev.packages = [ cfg.package ];
+            # Install patched udev rules with correct paths
+            services.udev.packages = [ udevRulesPackage ];
 
             # Ensure bluez is enabled
             hardware.bluetooth.enable = true;

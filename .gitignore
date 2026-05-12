@@ -158,3 +158,8 @@ packaging/arch/build/
 # Logs
 *.log
 logs/
+
+# Nix
+.direnv
+result
+result-*

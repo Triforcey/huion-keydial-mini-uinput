@@ -78,17 +78,23 @@
             doCheck = false; # Disable tests for now, can enable if needed
 
             postInstall = ''
-              # Install systemd user service
-              install -Dm644 ${./packaging/systemd/huion-keydial-mini-user.service} \
-                $out/lib/systemd/user/huion-keydial-mini-user.service
-
-              # Install udev rules
-              install -Dm644 ${./packaging/udev/99-huion-keydial-mini.rules} \
-                $out/lib/udev/rules.d/99-huion-keydial-mini.rules
-
-              # Install udev helper script
+              # Install udev helper script first (needed for path substitution)
               install -Dm755 ${./packaging/udev/unbind-huion.sh} \
                 $out/bin/unbind-huion.sh
+
+              # Patch and install systemd user service with correct binary path
+              mkdir -p $out/lib/systemd/user
+              ${pkgs.gnused}/bin/sed \
+                "s|/usr/bin/huion-keydial-mini|$out/bin/huion-keydial-mini|g" \
+                ${./packaging/systemd/huion-keydial-mini-user.service} \
+                > $out/lib/systemd/user/huion-keydial-mini-user.service
+
+              # Patch and install udev rules with correct script path
+              mkdir -p $out/lib/udev/rules.d
+              ${pkgs.gnused}/bin/sed \
+                "s|/usr/local/bin/unbind-huion.sh|$out/bin/unbind-huion.sh|g" \
+                ${./packaging/udev/99-huion-keydial-mini.rules} \
+                > $out/lib/udev/rules.d/99-huion-keydial-mini.rules
 
               # Install default config
               install -Dm644 ${./packaging/config.yaml.default} \
@@ -132,27 +138,6 @@
         }:
         let
           cfg = config.services.huion-keydial-mini;
-
-          # Create a patched package with correct paths in udev rules and systemd service
-          patchedPackage = pkgs.runCommand "huion-keydial-mini-driver-patched" {} ''
-            mkdir -p $out/lib/udev/rules.d
-            mkdir -p $out/lib/systemd/user
-
-            # Copy everything from the original package
-            cp -r ${cfg.package}/* $out/
-
-            # Patch udev rules with correct path to unbind-huion.sh
-            ${pkgs.gnused}/bin/sed \
-              "s|/usr/local/bin/unbind-huion.sh|${cfg.package}/bin/unbind-huion.sh|g" \
-              ${cfg.package}/lib/udev/rules.d/99-huion-keydial-mini.rules \
-              > $out/lib/udev/rules.d/99-huion-keydial-mini.rules
-
-            # Patch systemd service with correct path to huion-keydial-mini
-            ${pkgs.gnused}/bin/sed \
-              "s|/usr/bin/huion-keydial-mini|${cfg.package}/bin/huion-keydial-mini|g" \
-              ${cfg.package}/share/systemd/user/huion-keydial-mini-user.service \
-              > $out/lib/systemd/user/huion-keydial-mini-user.service
-          '';
         in
         {
           options.services.huion-keydial-mini = {
@@ -168,9 +153,11 @@
           config = lib.mkIf cfg.enable {
             environment.systemPackages = [ cfg.package ];
 
-            # Install patched udev rules and systemd service with correct paths
-            services.udev.packages = [ patchedPackage ];
-            systemd.packages = [ patchedPackage ];
+            # Install udev rules (already patched in postInstall)
+            services.udev.packages = [ cfg.package ];
+
+            # Install systemd user service (already patched in postInstall)
+            systemd.packages = [ cfg.package ];
 
             # Ensure bluez is enabled
             hardware.bluetooth.enable = true;

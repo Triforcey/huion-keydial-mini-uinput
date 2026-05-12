@@ -133,15 +133,25 @@
         let
           cfg = config.services.huion-keydial-mini;
 
-          # Create a patched udev rules package with correct paths
-          udevRulesPackage = pkgs.runCommand "huion-keydial-mini-udev-rules" {} ''
+          # Create a patched package with correct paths in udev rules and systemd service
+          patchedPackage = pkgs.runCommand "huion-keydial-mini-driver-patched" {} ''
             mkdir -p $out/lib/udev/rules.d
+            mkdir -p $out/lib/systemd/user
 
-            # Substitute the unbind-huion.sh path with the correct store path
+            # Copy everything from the original package
+            cp -r ${cfg.package}/* $out/
+
+            # Patch udev rules with correct path to unbind-huion.sh
             ${pkgs.gnused}/bin/sed \
               "s|/usr/local/bin/unbind-huion.sh|${cfg.package}/bin/unbind-huion.sh|g" \
               ${cfg.package}/lib/udev/rules.d/99-huion-keydial-mini.rules \
               > $out/lib/udev/rules.d/99-huion-keydial-mini.rules
+
+            # Patch systemd service with correct path to huion-keydial-mini
+            ${pkgs.gnused}/bin/sed \
+              "s|/usr/bin/huion-keydial-mini|${cfg.package}/bin/huion-keydial-mini|g" \
+              ${cfg.package}/share/systemd/user/huion-keydial-mini-user.service \
+              > $out/lib/systemd/user/huion-keydial-mini-user.service
           '';
         in
         {
@@ -158,17 +168,15 @@
           config = lib.mkIf cfg.enable {
             environment.systemPackages = [ cfg.package ];
 
-            # Install patched udev rules with correct paths
-            services.udev.packages = [ udevRulesPackage ];
+            # Install patched udev rules and systemd service with correct paths
+            services.udev.packages = [ patchedPackage ];
+            systemd.packages = [ patchedPackage ];
 
             # Ensure bluez is enabled
             hardware.bluetooth.enable = true;
 
             # Add users to input group (users need to be specified in their own config)
             users.groups.input = { };
-
-            # Make systemd user service available
-            systemd.packages = [ cfg.package ];
           };
         };
 

@@ -74,6 +74,9 @@ systemctl --user enable --now huion-keydial-mini-user.service
 
    # Remove a binding
    keydialctl unbind BUTTON_1
+
+   # Clear all runtime bindings
+   keydialctl reset
    ```
 
 ### Supported Action Types

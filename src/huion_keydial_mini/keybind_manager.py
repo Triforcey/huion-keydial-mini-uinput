@@ -229,6 +229,8 @@ class KeybindManager:
                 return await self._cmd_set_binding(command)
             elif cmd_type == 'remove_binding':
                 return await self._cmd_remove_binding(command)
+            elif cmd_type == 'clear_all':
+                return await self._cmd_clear_all()
             elif cmd_type == 'list_actions':
                 return await self._cmd_list_actions()
             else:
@@ -287,6 +289,16 @@ class KeybindManager:
                 'status': 'error',
                 'message': f'Binding {action_id} not found'
             }
+
+    async def _cmd_clear_all(self) -> Dict[str, Any]:
+        """Clear all keybindings."""
+        count = len(self.keybind_map)
+        self.keybind_map.clear()
+        logger.info(f"Cleared all {count} bindings")
+        return {
+            'status': 'success',
+            'message': f'Cleared {count} bindings'
+        }
 
     async def _cmd_list_actions(self) -> Dict[str, Any]:
         """List available action IDs."""

@@ -429,33 +429,25 @@ def clear_device(ctx):
 @cli.command()
 @click.pass_context
 def reset(ctx):
-    """Reset configuration to defaults."""
-    config_path = ctx.obj.get('config_path')
-    config = _load_config(config_path)
+    """Reset runtime bindings (clears all key bindings without modifying config file)."""
+    async def do_reset():
+        socket_path = get_socket_path()
 
-    # Create default configuration
-    default_config = {
-        'device_address': None,
-        'key_mappings': {},
-        'dial_settings': {
-            'clockwise_key': 'KEY_VOLUMEUP',
-            'counterclockwise_key': 'KEY_VOLUMEDOWN',
-            'click_key': 'KEY_MUTE',
-            'sensitivity': 1.0
-        },
-        'uinput_device_name': 'Huion Keydial Mini',
-        'connection_timeout': 10.0,
-        'debug_mode': False
-    }
+        try:
+            response = await send_command(socket_path, {
+                'command': 'clear_all'
+            })
 
-    config.data = default_config
+            if response.get('status') == 'success':
+                click.echo("All runtime bindings cleared")
+            else:
+                click.echo(f"Error: {response.get('message', 'Unknown error')}", err=True)
+                sys.exit(1)
+        except Exception as e:
+            click.echo(f"Failed to connect to service: {e}", err=True)
+            sys.exit(1)
 
-    # Save configuration
-    config_file = _get_config_file(config_path)
-    config.save(str(config_file))
-
-    click.echo("Configuration reset to defaults")
-    click.echo(f"Configuration saved to: {config_file}")
+    asyncio.run(do_reset())
 
 
 def _load_config(config_path: Optional[str]) -> Config:

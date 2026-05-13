@@ -49,7 +49,7 @@
 
           huion-keydial-mini-driver = pkgs.python3Packages.buildPythonApplication {
             pname = "huion-keydial-mini-driver";
-            version = "1.2.0";
+            version = "1.2.1";
 
             src = ./.;
 

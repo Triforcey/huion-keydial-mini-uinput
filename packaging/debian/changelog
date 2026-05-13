@@ -2,8 +2,12 @@ huion-keydial-mini-driver (1.2.1-1) unstable; urgency=medium
 
   * Change 'reset' command to clear runtime bindings instead of writing to config file
   * Fix compatibility with read-only filesystems (e.g., NixOS home-manager)
+  * Simplify device connection handling and remove unused code
+  * Remove auto_reconnect config option (connection handling is core functionality)
+  * Handle BlueZ "Notify acquired" errors gracefully
+  * Fix reconnection when device powers off from inactivity
 
- -- JD Flamm <judsonwebdesign@gmail.com>  Mon, 12 May 2026 12:00:00 +0000
+ -- JD Flamm <judsonwebdesign@gmail.com>  Wed, 13 May 2026 16:58:00 -0600
 
 huion-keydial-mini-driver (1.2.0-1) unstable; urgency=medium
 

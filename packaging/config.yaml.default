@@ -54,7 +54,3 @@ connection_timeout: 10.0  # Timeout for device connection in seconds
 
 # Debug mode
 debug_mode: false  # Set to true for verbose logging
-
-# Bluetooth settings
-bluetooth:
-  auto_reconnect: true  # Enable automatic connection detection via DBus

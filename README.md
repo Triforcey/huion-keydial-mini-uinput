@@ -152,10 +152,6 @@ connection_timeout: 10.0
 
 # Debug mode
 debug_mode: false
-
-# Bluetooth settings
-bluetooth:
-  auto_reconnect: true  # Enable automatic connection detection via DBus
 ```
 
 **Note**: Key mappings in the config file are loaded as initial bindings, but can be modified at runtime using `keydialctl`.

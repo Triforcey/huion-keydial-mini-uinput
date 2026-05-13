@@ -78,9 +78,13 @@
             doCheck = false; # Disable tests for now, can enable if needed
 
             postInstall = ''
-              # Install udev helper script first (needed for path substitution)
-              install -Dm755 ${./packaging/udev/unbind-huion.sh} \
-                $out/bin/unbind-huion.sh
+              # Patch and install udev helper script with correct bash path
+              mkdir -p $out/bin
+              ${pkgs.gnused}/bin/sed \
+                "s|#!/bin/bash|#!${pkgs.bash}/bin/bash|g" \
+                ${./packaging/udev/unbind-huion.sh} \
+                > $out/bin/unbind-huion.sh
+              chmod 755 $out/bin/unbind-huion.sh
 
               # Patch and install systemd user service with correct binary path
               mkdir -p $out/lib/systemd/user

@@ -149,7 +149,12 @@
             # Install udev rules with patched script path
             services.udev.extraRules = ''
               # Huion Keydial Mini - Unbind from kernel HID driver
-              ACTION=="add", SUBSYSTEM=="bluetooth", ATTRS{name}=="Huion Keydial Mini", RUN+="${cfg.package}/bin/unbind-huion.sh"
+              ACTION=="add", SUBSYSTEMS=="input", ATTRS{id/vendor}=="256c", ATTRS{id/product}=="8251", ATTRS{name}=="*Keydial*", RUN+="${cfg.package}/bin/unbind-huion.sh $env{DEVPATH}"
+
+              # Allow user access of huion keydial mini
+              KERNEL=="event*", SUBSYSTEM=="input", ATTRS{name}=="Huion Keydial Mini", TAG+="uaccess"
+              # Set huion keydial mini as not a tablet
+              KERNEL=="event*", SUBSYSTEM=="input", ATTRS{name}=="Huion Keydial Mini", ENV{ID_INPUT_TABLET}="0"
             '';
 
             # Install systemd user service (already patched in postInstall)

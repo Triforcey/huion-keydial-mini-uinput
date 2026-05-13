@@ -89,13 +89,6 @@
                 ${./packaging/systemd/huion-keydial-mini-user.service} \
                 > $out/lib/systemd/user/huion-keydial-mini-user.service
 
-              # Patch and install udev rules with correct script path
-              mkdir -p $out/lib/udev/rules.d
-              ${pkgs.gnused}/bin/sed \
-                "s|/usr/local/bin/unbind-huion.sh|$out/bin/unbind-huion.sh|g" \
-                ${./packaging/udev/99-huion-keydial-mini.rules} \
-                > $out/lib/udev/rules.d/99-huion-keydial-mini.rules
-
               # Install default config
               install -Dm644 ${./packaging/config.yaml.default} \
                 $out/etc/huion-keydial-mini/config.yaml
@@ -153,8 +146,11 @@
           config = lib.mkIf cfg.enable {
             environment.systemPackages = [ cfg.package ];
 
-            # Install udev rules (already patched in postInstall)
-            services.udev.packages = [ cfg.package ];
+            # Install udev rules with patched script path
+            services.udev.extraRules = ''
+              # Huion Keydial Mini - Unbind from kernel HID driver
+              ACTION=="add", SUBSYSTEM=="bluetooth", ATTRS{name}=="Huion Keydial Mini", RUN+="${cfg.package}/bin/unbind-huion.sh"
+            '';
 
             # Install systemd user service (already patched in postInstall)
             systemd.packages = [ cfg.package ];

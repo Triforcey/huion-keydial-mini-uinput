@@ -85,20 +85,22 @@ You can also install just the package without the module:
 
 ## What Gets Installed
 
-The NixOS module automatically installs:
+The NixOS module automatically installs and configures:
 
 - ✅ Python package with all dependencies (bleak, evdev, click, pyyaml, dbus-next)
-- ✅ Three command-line tools:
+- ✅ Command-line tools:
   - `huion-keydial-mini` - Main driver daemon
   - `keydialctl` - Control utility
   - `create-huion-keydial-uinput-device` - Device creation utility
   - `unbind-huion.sh` - Udev helper script
 - ✅ Systemd user service (`huion-keydial-mini-user.service`)
-- ✅ Udev rules for device access (automatically patched with correct Nix store paths)
+- ✅ **Udev rules** (automatically configured with correct Nix store paths)
+- ✅ **Bluetooth support** (hardware.bluetooth.enable = true)
+- ✅ **Input group** configuration
 - ✅ Default configuration file at `/etc/huion-keydial-mini/config.yaml`
 - ✅ Documentation and license files
 
-**Note:** The NixOS module automatically patches the udev rules to use the correct Nix store paths for the `unbind-huion.sh` script, so everything works out of the box without manual path configuration.
+**No manual udev configuration needed!** The module automatically sets up udev rules with the correct Nix store paths when you enable the service.
 
 ## Configuration Files
 

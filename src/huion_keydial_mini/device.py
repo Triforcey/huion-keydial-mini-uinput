@@ -220,8 +220,18 @@ class HuionKeydialMini:
 
         logger.info(f"Connecting to {self.device_info.address}...")
 
+        # The device is normally ALREADY connected at the BlueZ level (BlueZ's
+        # HID-over-GATT plugin connects it automatically). An already-connected
+        # BLE device no longer advertises, so BleakClient(<address-string>),
+        # which scans to resolve the device, fails with
+        # "Device with address ... was not found". Resolve the BlueZ object path
+        # ourselves and hand bleak a BLEDevice so it attaches directly without
+        # scanning. Fall back to the bare address if resolution fails.
+        ble_device = await self._resolve_ble_device()
+        target = ble_device if ble_device is not None else self.device_info.address
+
         self.client = BleakClient(
-            self.device_info.address,
+            target,
             timeout=self.config.connection_timeout
         )
 
@@ -239,6 +249,72 @@ class HuionKeydialMini:
             logger.error(f"Connection failed: {e}")
             self.connected = False
             raise
+
+    async def _resolve_ble_device(self) -> Optional[BLEDevice]:
+        """Resolve the target MAC to a BLEDevice carrying its BlueZ object path.
+
+        Querying BlueZ's ObjectManager lets us find the device even when it is
+        already connected (and therefore not advertising). The adapter is
+        discovered dynamically (the device may live under hci0, hci1, ...), so
+        the path is never hardcoded. Returns None if the device cannot be found,
+        in which case the caller falls back to address-based resolution.
+        """
+        from dbus_next.aio.message_bus import MessageBus
+        from dbus_next.constants import BusType, MessageType
+        from dbus_next.message import Message
+
+        target = self.device_info.address.upper()
+        bus = None
+        try:
+            bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+            reply = await bus.call(
+                Message(
+                    destination="org.bluez",
+                    path="/",
+                    interface="org.freedesktop.DBus.ObjectManager",
+                    member="GetManagedObjects",
+                )
+            )
+
+            if reply is None or reply.message_type != MessageType.METHOD_RETURN:
+                logger.debug("GetManagedObjects did not return successfully")
+                return None
+
+            objects = reply.body[0]
+            for path, interfaces in objects.items():
+                device = interfaces.get("org.bluez.Device1")
+                if not device:
+                    continue
+
+                address = device.get("Address")
+                if hasattr(address, "value"):
+                    address = address.value
+                if not address or address.upper() != target:
+                    continue
+
+                # Unwrap dbus_next Variants into plain Python values for bleak.
+                props = {
+                    key: (val.value if hasattr(val, "value") else val)
+                    for key, val in device.items()
+                }
+                name = props.get("Name") or props.get("Alias") or self.device_info.name
+                logger.info(f"Resolved {target} to BlueZ object path {path}")
+                return BLEDevice(self.device_info.address, name, {"path": path, "props": props})
+
+            logger.warning(
+                f"Could not resolve BlueZ object path for {target}; "
+                "falling back to address-based connection"
+            )
+            return None
+        except Exception as e:
+            logger.warning(f"Error resolving BlueZ device path for {target}: {e}")
+            return None
+        finally:
+            if bus:
+                try:
+                    bus.disconnect()
+                except Exception:
+                    pass
 
     async def _log_services(self):
         """Log available services and characteristics."""

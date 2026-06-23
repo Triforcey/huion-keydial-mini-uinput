@@ -1,9 +1,9 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: huion-keydial-mini-driver
-Source: https://github.com/your-username/huion-keydial-mini-uinput
+Source: https://github.com/Triforcey/huion-keydial-mini-uinput
 
 Files: *
-Copyright: 2025 Your Name <your.email@example.com>
+Copyright: 2025 JD Flamm <judsonwebdesign@gmail.com>
 License: MIT
 
 License: MIT

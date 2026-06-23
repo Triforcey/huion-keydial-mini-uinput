@@ -1,4 +1,4 @@
-.PHONY: help install install-dev install-system install-all install-udev install-systemd install-config uninstall uninstall-all clean build test test-cov package-python package-arch package-debian package-rpm package-all uninstall-systemd uninstall-system uninstall-udev uninstall-config
+.PHONY: help install install-dev install-system install-all install-udev install-systemd install-config uninstall uninstall-all clean build test test-cov package-python nix-build-all uninstall-systemd uninstall-system uninstall-udev uninstall-config
 
 PYTHON := python3
 PIP := pip3
@@ -26,11 +26,8 @@ help:
 	@echo "  clean         Clean build artifacts"
 	@echo ""
 	@echo "Packaging:"
-	@echo "  package-python Build Python wheel (works on all systems)"
-	@echo "  package-arch   Build Arch Linux package (Arch/Manjaro only)"
-	@echo "  package-debian Build Debian package (Debian/Ubuntu only)"
-	@echo "  package-rpm    Build RPM package (Fedora/RHEL/openSUSE only)"
-	@echo "  package-all    Build all packages supported on current system"
+	@echo "  package-python  Build Python wheel package (works on all systems)"
+	@echo "  nix-build-all   Build all distro packages via Nix (Arch, Debian, RPM)"
 	@echo ""
 	@echo "Configuration:"
 	@echo "  Use 'keydialctl' command for runtime configuration"
@@ -55,8 +52,6 @@ uninstall:
 install-udev:
 	@echo "Installing modprobe blacklist for device conflicts..."
 	sudo ./packaging/install-udev.sh
-
-
 
 install-config:
 	@echo "Installing configuration files with proper permissions..."
@@ -89,8 +84,6 @@ test:
 		pytest tests/ -v --tb=short; \
 	fi
 
-
-
 test-cov:
 	@echo "Running tests with coverage..."
 	@if command -v pytest >/dev/null 2>&1; then \
@@ -103,55 +96,12 @@ test-cov:
 
 package-python:
 	@echo "Building Python wheel package..."
-	./packaging/build.sh
+	$(PYTHON) -m build
 
-package-arch:
-	@echo "Building Arch Linux package..."
-	@if command -v makepkg >/dev/null 2>&1; then \
-		./packaging/arch/build.sh; \
-	else \
-		echo "Error: makepkg not found. This command only works on Arch Linux."; \
-		exit 1; \
-	fi
-
-package-debian:
-	@echo "Building Debian package..."
-	@if command -v dpkg-buildpackage >/dev/null 2>&1; then \
-		./packaging/debian/build.sh; \
-	else \
-		echo "Error: dpkg-buildpackage not found. This command only works on Debian/Ubuntu."; \
-		echo "Install with: sudo apt-get install dpkg-dev"; \
-		exit 1; \
-	fi
-
-package-rpm:
-	@echo "Building RPM package..."
-	@if command -v rpmbuild >/dev/null 2>&1; then \
-		./packaging/rpm/build.sh; \
-	else \
-		echo "Error: rpmbuild not found. This command only works on RPM-based systems."; \
-		echo "Install with: sudo dnf install rpm-build  # or sudo yum install rpm-build"; \
-		exit 1; \
-	fi
-
-package-all:
-	@echo "Building all packages supported on current system..."
-	@./packaging/build.sh
-	@if command -v makepkg >/dev/null 2>&1; then \
-		echo "Arch Linux detected - building Arch package..."; \
-		./packaging/arch/build.sh; \
-	fi
-	@if command -v dpkg-buildpackage >/dev/null 2>&1; then \
-		echo "Debian/Ubuntu detected - building Debian package..."; \
-		./packaging/debian/build.sh; \
-	fi
-	@if command -v rpmbuild >/dev/null 2>&1; then \
-		echo "RPM-based system detected - building RPM package..."; \
-		./packaging/rpm/build.sh; \
-	fi
-	@echo "Package building complete for all supported systems on this host"
-
-
+nix-build-all:
+	@echo "Building all distro packages via Nix..."
+	nix build .#arch-pkg .#deb-pkg .#rpm-pkg
+	@echo "Distro packages built. Check result/ directory for outputs."
 
 install-systemd:
 	@echo "Installing systemd services with proper permissions..."
@@ -172,11 +122,8 @@ uninstall-system:
 	rm -f /usr/bin/create-huion-keydial-uinput-device
 	rm -f /usr/bin/keydialctl
 
-# Additional installation targets with proper permissions
 install-all: install-system install-systemd install-udev
 	@echo "Full installation complete with proper permissions set"
-
-
 
 uninstall-all: uninstall-system uninstall-systemd uninstall-udev
 	@echo "Complete uninstallation finished"

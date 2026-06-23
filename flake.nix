@@ -39,17 +39,28 @@
         present. For safety, removal should
         be a manual step, even if trivial.
       */
-      version = "3.13";
+      venvVersion = "3.13";
+
+      # Extract the project version from pyproject.toml at evaluation time
+      projectVersion =
+        let
+          pyprojectTOML = builtins.readFile ./pyproject.toml;
+          versionMatch = builtins.match ".*[[]project[]].*version = \"([^\"]+)\".*" pyprojectTOML;
+        in
+        if versionMatch != null then builtins.head versionMatch else "unknown";
     in
     {
       packages = forEachSupportedSystem (
         { pkgs, system }:
+        let
+          isLinux = system == "x86_64-linux";
+        in
         {
           default = self.packages.${system}.huion-keydial-mini-driver;
 
           huion-keydial-mini-driver = pkgs.python3Packages.buildPythonApplication {
             pname = "huion-keydial-mini-driver";
-            version = "1.2.1";
+            version = projectVersion;
 
             src = ./.;
 
@@ -113,12 +124,10 @@
                 $out/share/licenses/huion-keydial-mini-driver/LICENSE
 
               # Install systemd user preset
-              install -Dm644 ${
-                pkgs.writeText "99-huion-keydial-mini.preset" ''
-                  # Enable huion-keydial-mini-user service
-                  enable huion-keydial-mini-user.service
-                ''
-              } $out/lib/systemd/user-preset/99-huion-keydial-mini.preset
+              install -Dm644 ${pkgs.writeText "99-huion-keydial-mini.preset" ''
+                # Enable huion-keydial-mini-user service
+                enable huion-keydial-mini-user.service
+              ''} $out/lib/systemd/user-preset/99-huion-keydial-mini.preset
             '';
 
             meta = with lib; {
@@ -128,6 +137,246 @@
               maintainers = [ ];
               platforms = platforms.linux;
             };
+          };
+        }
+        // lib.optionalAttrs isLinux {
+          # Source tarball — shared input for all distro builds
+          source-tarball = pkgs.stdenv.mkDerivation {
+            pname = "huion-keydial-mini-source";
+            version = projectVersion;
+
+            src = ./.;
+
+            buildPhase = ''
+              mkdir -p $out
+              tar --transform="s,^,huion-keydial-mini-driver-${projectVersion}/," \
+                -czf $out/huion-keydial-mini-driver-${projectVersion}.tar.gz \
+                src/ pyproject.toml README.md LICENSE \
+                packaging/udev/ packaging/systemd/ packaging/config.yaml.default
+            '';
+
+            dontInstall = true;
+          };
+
+          # Debian package — built from source using dpkg-deb
+          deb-pkg = pkgs.stdenv.mkDerivation {
+            pname = "huion-keydial-mini-deb";
+            version = projectVersion;
+
+            src = self.packages.${system}.source-tarball;
+            dontUnpack = true;
+
+            nativeBuildInputs = with pkgs; [
+              dpkg
+              python3
+              python3Packages.build
+              python3Packages.installer
+              python3Packages.wheel
+              python3Packages.setuptools
+              python3Packages.pip
+            ];
+
+            buildPhase = ''
+                            # Unpack source tarball
+                            tar xzf $src/huion-keydial-mini-driver-${projectVersion}.tar.gz
+                            cd huion-keydial-mini-driver-${projectVersion}
+
+                            # Build wheel
+                            python -m build --wheel --no-isolation
+
+                            # Stage FHS layout
+                            STAGING=$TMPDIR/deb-root
+                            mkdir -p $STAGING/usr/bin $STAGING/usr/lib/udev/rules.d
+                            mkdir -p $STAGING/usr/lib/systemd/user $STAGING/usr/lib/systemd/user-preset
+                            mkdir -p $STAGING/etc/huion-keydial-mini $STAGING/usr/local/bin
+                            mkdir -p $STAGING/usr/share/doc/huion-keydial-mini-driver
+                            mkdir -p $STAGING/usr/share/licenses/huion-keydial-mini-driver
+
+                            # Install Python package to staging using pip with FHS prefix
+                            pip install --no-deps --no-compile --prefix=$STAGING/usr dist/*.whl
+
+                            # Fix shebangs: replace Nix Python with system Python
+                            for bin in $STAGING/usr/bin/*; do
+                              if [ -f "$bin" ]; then
+                                sed -i '1s|.*|#!/usr/bin/env python3|' "$bin"
+                              fi
+                            done
+
+                            # Remove any Nix store paths that leaked into the staging tree
+                            rm -rf $STAGING/nix
+
+                            # Install udev rules
+                            install -Dm644 packaging/udev/99-huion-keydial-mini.rules \
+                              $STAGING/usr/lib/udev/rules.d/99-huion-keydial-mini.rules
+
+                            # Install unbind script
+                            install -Dm755 packaging/udev/unbind-huion.sh \
+                              $STAGING/usr/local/bin/unbind-huion.sh
+
+                            # Install systemd service
+                            install -Dm644 packaging/systemd/huion-keydial-mini-user.service \
+                              $STAGING/usr/lib/systemd/user/huion-keydial-mini-user.service
+
+                            # Install default config
+                            install -Dm644 packaging/config.yaml.default \
+                              $STAGING/etc/huion-keydial-mini/config.yaml
+
+                            # Install docs and license
+                            install -Dm644 README.md \
+                              $STAGING/usr/share/doc/huion-keydial-mini-driver/README.md
+                            install -Dm644 LICENSE \
+                              $STAGING/usr/share/licenses/huion-keydial-mini-driver/LICENSE
+
+                            # Install systemd preset
+                            echo "enable huion-keydial-mini-user.service" > \
+                              $STAGING/usr/lib/systemd/user-preset/99-huion-keydial-mini.preset
+
+                            # DEBIAN control directory
+                            mkdir -p $STAGING/DEBIAN
+                            cat > $STAGING/DEBIAN/control <<CONTROL
+              Package: huion-keydial-mini-driver
+              Version: ${projectVersion}-1
+              Architecture: all
+              Maintainer: JD Flamm <judsonwebdesign@gmail.com>
+              Depends: python3 (>= 3.8), python3-bleak, python3-evdev, python3-click, python3-yaml, python3-dbus-next, systemd, bluez
+              Provides: huion-keydial-mini
+              Conflicts: huion-keydial-mini
+              Section: utils
+              Priority: optional
+              Homepage: https://github.com/Triforcey/huion-keydial-mini-uinput
+              Description: User space driver for Huion Keydial Mini bluetooth device
+               This package provides a user space driver for the Huion Keydial Mini
+               bluetooth device. It intercepts HID over BLE events and creates a
+               virtual input device using uinput.
+               .
+               Features:
+                - Bluetooth Low Energy connectivity
+                - Customizable key mappings
+                - Dial rotation and click support
+                - Systemd service integration
+              CONTROL
+
+                            # postinst
+                            install -Dm755 ${./packaging/debian/postinst} $STAGING/DEBIAN/postinst
+                            # prerm
+                            install -Dm755 ${./packaging/debian/prerm} $STAGING/DEBIAN/prerm
+
+                            # Build .deb
+                            dpkg-deb --build --root-owner-group $STAGING
+                            mkdir -p $out
+                            cp $TMPDIR/deb-root.deb $out/huion-keydial-mini-driver_${projectVersion}-1_all.deb
+            '';
+
+            dontInstall = true;
+          };
+
+          # Arch package — built from source using makepkg
+          arch-pkg = pkgs.stdenv.mkDerivation {
+            pname = "huion-keydial-mini-arch";
+            version = projectVersion;
+
+            src = self.packages.${system}.source-tarball;
+            dontUnpack = true;
+
+            nativeBuildInputs = with pkgs; [
+              pacman
+              fakeroot
+              libarchive
+              zstd
+              python3
+              python3Packages.build
+              python3Packages.installer
+              python3Packages.wheel
+              python3Packages.setuptools
+              python3Packages.pip
+            ];
+
+            buildPhase = ''
+                            # Set up makepkg build directory
+                            mkdir -p build
+                            cd build
+
+                            # Place source tarball where PKGBUILD expects it
+                            cp $src/huion-keydial-mini-driver-${projectVersion}.tar.gz .
+
+                            # Copy PKGBUILD
+                            cp ${./packaging/arch/PKGBUILD} ./PKGBUILD
+
+                            # Run makepkg with Nix-provided config
+                            export HOME=$TMPDIR
+
+                            # Create a minimal pacman.conf so makepkg can initialize
+                            mkdir -p $TMPDIR/pacman-root $TMPDIR/pacman-db $TMPDIR/pacman-cache
+                            cat > $TMPDIR/pacman.conf <<'PACMANCONF'
+              [options]
+              RootDir = $TMPDIR/pacman-root
+              DBPath = $TMPDIR/pacman-db
+              CacheDir = $TMPDIR/pacman-cache
+              LogFile = /dev/null
+              PACMANCONF
+                            export PACMAN_CONF=$TMPDIR/pacman.conf
+
+                            PKGEXT=".pkg.tar.zst" makepkg \
+                              --config ${pkgs.pacman}/etc/makepkg.conf \
+                              --skipinteg \
+                              --skippgpcheck \
+                              --nodeps \
+                              --nocheck \
+                              --noconfirm \
+                              --holdver
+            '';
+
+            installPhase = ''
+              mkdir -p $out
+              cp *.pkg.tar.zst $out/
+            '';
+          };
+
+          # RPM package — built from source using rpmbuild
+          rpm-pkg = pkgs.stdenv.mkDerivation {
+            pname = "huion-keydial-mini-rpm";
+            version = projectVersion;
+
+            src = self.packages.${system}.source-tarball;
+            dontUnpack = true;
+
+            nativeBuildInputs = with pkgs; [
+              rpm
+              python3
+              python3Packages.setuptools
+              python3Packages.wheel
+              python3Packages.pip
+            ];
+
+            buildPhase = ''
+              # Set up rpmbuild tree
+              RPMROOT=$TMPDIR/rpmbuild
+              mkdir -p $RPMROOT/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+
+              # Place source tarball
+              cp $src/huion-keydial-mini-driver-${projectVersion}.tar.gz $RPMROOT/SOURCES/
+
+              # Place spec file
+              cp ${./packaging/rpm/huion-keydial-mini-driver.spec} $RPMROOT/SPECS/huion-keydial-mini-driver.spec
+
+              # Build
+              rpmbuild -bb \
+                --nodeps \
+                --define "_topdir $RPMROOT" \
+                --define "_udevrulesdir /usr/lib/udev/rules.d" \
+                --define "_userunitdir /usr/lib/systemd/user" \
+                --define "_rpmdir $RPMROOT/RPMS" \
+                --define "_tmppath $TMPDIR" \
+                --define "_var /tmp/rpmvar" \
+                --define "_dbpath /tmp/rpmdb" \
+                $RPMROOT/SPECS/huion-keydial-mini-driver.spec
+
+              # Collect output
+              mkdir -p $out
+              find $RPMROOT/RPMS -name '*.rpm' -exec cp {} $out/ \;
+            '';
+
+            dontInstall = true;
           };
         }
       );
@@ -182,7 +431,7 @@
               lib.concatStrings
             ];
 
-          python = pkgs."python${concatMajorMinor version}";
+          python = pkgs."python${concatMajorMinor venvVersion}";
         in
         {
           default = pkgs.mkShellNoCC {

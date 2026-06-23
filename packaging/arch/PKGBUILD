@@ -24,39 +24,45 @@ makedepends=(
 )
 provides=('huion-keydial-mini')
 conflicts=('huion-keydial-mini')
-source=()
-sha256sums=()
+source=("huion-keydial-mini-driver-${pkgver}.tar.gz")
+sha256sums=('SKIP')
 options=(!strip !debug)
 
 prepare() {
-  # Use PROJECT_ROOT env variable if set, otherwise default to $PWD/../..
-  PROJECT_ROOT="${PROJECT_ROOT:-$PWD/../..}"
-  cp -r "$PROJECT_ROOT/src" "$srcdir/"
-  cp "$PROJECT_ROOT/pyproject.toml" "$srcdir/"
-  cp "$PROJECT_ROOT/README.md" "$srcdir/"
-  cp "$PROJECT_ROOT/LICENSE" "$srcdir/"
+  cd "$srcdir"
+  cd "huion-keydial-mini-driver-${pkgver}"
 }
 
 build() {
-  cd "$srcdir"
+  cd "huion-keydial-mini-driver-${pkgver}"
   python -m build --wheel --no-isolation
 }
 
 package() {
-  cd "$srcdir"
-  python -m installer --destdir="$pkgdir" dist/*.whl
-  PROJECT_ROOT="${PROJECT_ROOT:-$PWD/../..}"
-  install -Dm644 "$PROJECT_ROOT/packaging/systemd/huion-keydial-mini-user.service" \
+  cd "huion-keydial-mini-driver-${pkgver}"
+  pip install --no-deps --no-compile --prefix="$pkgdir/usr" dist/*.whl
+
+  # Fix shebangs to use system Python
+  for bin in "$pkgdir/usr/bin/"*; do
+    if [ -f "$bin" ]; then
+      sed -i '1s|.*|#!/usr/bin/env python3|' "$bin"
+    fi
+  done
+
+  # Remove any Nix store paths
+  rm -rf "$pkgdir/nix"
+
+  install -Dm644 packaging/systemd/huion-keydial-mini-user.service \
     "$pkgdir/usr/lib/systemd/user/huion-keydial-mini-user.service"
-  install -Dm644 "$PROJECT_ROOT/packaging/udev/99-huion-keydial-mini.rules" \
+  install -Dm644 packaging/udev/99-huion-keydial-mini.rules \
     "$pkgdir/usr/lib/udev/rules.d/99-huion-keydial-mini.rules"
-  install -Dm755 "$PROJECT_ROOT/packaging/udev/unbind-huion.sh" \
+  install -Dm755 packaging/udev/unbind-huion.sh \
     "$pkgdir/usr/local/bin/unbind-huion.sh"
-  install -Dm644 "$PROJECT_ROOT/packaging/config.yaml.default" \
+  install -Dm644 packaging/config.yaml.default \
     "$pkgdir/etc/huion-keydial-mini/config.yaml"
-  install -Dm644 "$PROJECT_ROOT/README.md" \
+  install -Dm644 README.md \
     "$pkgdir/usr/share/doc/$pkgname/README.md"
-  install -Dm644 "$PROJECT_ROOT/LICENSE" \
+  install -Dm644 LICENSE \
     "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm755 /dev/stdin "$pkgdir/usr/lib/systemd/user-preset/99-huion-keydial-mini.preset" <<'EOF'
 # Enable huion-keydial-mini-user service

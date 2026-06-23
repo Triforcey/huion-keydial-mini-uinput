@@ -1,0 +1,70 @@
+name: Build & Test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  nix-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+      - uses: cachix/cachix-action@v16
+        with:
+          name: huion-keydial-mini
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+          skipPush: ${{ github.event_name == 'pull_request' }}
+
+      - name: Check flake formatting
+        run: nix fmt -- --check
+
+      - name: Build Nix package
+        run: nix build .
+
+      - name: Run tests
+        run: nix build .#default --out-link default-result && cd default-result && python -m pytest tests/ -v
+
+      - name: Build distro packages
+        run: |
+          nix build .#arch-pkg --out-link arch-out
+          nix build .#deb-pkg --out-link deb-out
+          nix build .#rpm-pkg --out-link rpm-out
+
+      - name: Verify artifacts
+        run: |
+          echo "Arch package:"
+          ls -la arch-out/*.pkg.tar.zst
+          echo "Debian package:"
+          ls -la deb-out/*.deb
+          echo "RPM package:"
+          ls -la rpm-out/*.rpm
+
+      - name: Inspect .deb contents
+        run: dpkg-deb --info deb-out/*.deb && dpkg-deb --contents deb-out/*.deb
+
+      - name: Inspect .rpm contents
+        run: rpm -qpl rpm-out/*.rpm
+
+      - name: Inspect Arch package contents
+        run: tar --zstd -tf arch-out/*.pkg.tar.zst | head -50
+
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: pip install -e ".[test]"
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+      - name: Run tests with coverage
+        run: pytest tests/ -v --cov=src/huion_keydial_mini --cov-report=term

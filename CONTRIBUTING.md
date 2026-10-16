@@ -316,17 +316,18 @@ For feature requests, include:
 
 ## Release Process
 
-1. **Trigger the release**: Run the **"Bump version and release"** workflow
-   (Actions → Bump version and release → Run workflow). Pick a semantic bump
+1. **Create the version bump**: Run the **"Create version bump PR"** workflow
+   (Actions → Create version bump PR → Run workflow). Pick a semantic bump
    (patch/minor/major) or an explicit version. It bumps the version in
-   `pyproject.toml` (the single source of truth), runs the test suite, opens a
-   version-bump pull request, merges it once required checks pass, tags
-   `v<version>` on the merge commit, and then builds and publishes the release.
-2. Alternatively, bump `pyproject.toml` manually and push a `v*` tag — the
-   release workflow runs on tag pushes too.
-3. **Build packages**: GitHub Actions builds `.pkg.tar.zst`, `.deb`, `.rpm`, and
-   the source tarball and publishes them to GitHub Releases automatically, with
-   release notes generated from commits since the last tag
+   `pyproject.toml` (the single source of truth), runs the test suite, and opens
+   a version-bump pull request that is merged once required checks pass.
+2. **Tagging is automatic**: the merge push to `main` triggers the **"Tag
+   release version"** workflow, which tags `v<version>` if that version has no
+   tag yet. Tag pushes trigger the release workflow.
+3. **Build packages**: the **"Release"** workflow builds `.pkg.tar.zst`,
+   `.deb`, `.rpm`, and the source tarball and publishes them to GitHub Releases
+   automatically, with release notes generated from commits since the last tag.
+   To (re-)release an existing tag, dispatch **"Release"** with the tag name.
 4. **Publish**: Verify the release assets on the Releases page
 
 ## License

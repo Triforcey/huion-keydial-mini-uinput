@@ -1,4 +1,4 @@
-name: Bump version and release
+name: Create version bump PR
 
 on:
   workflow_dispatch:
@@ -23,14 +23,12 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: release
+  group: bump
   cancel-in-progress: false
 
 jobs:
   bump:
     runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.bump.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -121,9 +119,10 @@ jobs:
             --title "bump version to $VERSION" \
             --body "Automatic version bump to **$VERSION** for release $TAG.
 
-          Created by the *Bump version and release* workflow. This PR is merged
-          automatically once required checks pass, after which the release tag
-          is created and the release workflow builds and publishes artifacts.")
+          Created by the *Create version bump PR* workflow. This PR is merged
+          automatically once required checks pass, after which the tag
+          workflow tags the new version and the release workflow builds and
+          publishes artifacts.")
 
           echo "number=${PR_URL##*/}" >> $GITHUB_OUTPUT
           echo "url=$PR_URL" >> $GITHUB_OUTPUT
@@ -168,20 +167,7 @@ jobs:
             exit 1
           fi
 
-          SHA=$(gh pr view "$PR" --json mergeCommit --jq '.mergeCommit.oid')
-          echo "sha=$SHA" >> $GITHUB_OUTPUT
-          echo "Merged as $SHA"
-
-      - name: Tag the release commit
-        env:
-          TAG: ${{ steps.bump.outputs.tag }}
-          SHA: ${{ steps.merge.outputs.sha }}
-        run: |
-          git fetch origin main
-          git cat-file -e "$SHA^{commit}" 2>/dev/null || git fetch origin "$SHA"
-          git tag -a "$TAG" -m "$TAG" "$SHA"
-          git push origin "$TAG"
-          echo "Tagged $TAG at $SHA"
+          echo "Bump PR merged"
 
       - name: Clean up bump branch on failure
         if: failure() && steps.bump.outputs.tag != ''
@@ -193,10 +179,3 @@ jobs:
             echo "Removing $BRANCH after failed run"
             git push origin --delete "$BRANCH"
           fi
-
-  release:
-    needs: bump
-    uses: ./.github/workflows/release.yml
-    with:
-      tag: ${{ needs.bump.outputs.tag }}
-    secrets: inherit

@@ -25,22 +25,6 @@
           }
         );
 
-      /*
-        Change this value ({major}.{min}) to
-        update the Python virtual-environment
-        version. When you do this, make sure
-        to delete the `.venv` directory to
-        have the hook rebuild it for the new
-        version, since it won't overwrite an
-        existing one. After this, reload the
-        development shell to rebuild it.
-        You'll see a warning asking you to
-        do this when version mismatches are
-        present. For safety, removal should
-        be a manual step, even if trivial.
-      */
-      venvVersion = "3.13";
-
       # Extract the project version from pyproject.toml at evaluation time
       projectVersion =
         let
@@ -428,38 +412,32 @@
       devShells = forEachSupportedSystem (
         { pkgs, system }:
         let
-          concatMajorMinor =
-            v:
-            lib.pipe v [
-              lib.versions.splitVersion
-              (lib.sublist 0 2)
-              lib.concatStrings
-            ];
-
-          python = pkgs."python${concatMajorMinor venvVersion}";
+          # Same interpreter the package builds use; tracks nixpkgs updates.
+          python = pkgs.python3;
         in
         {
           default = pkgs.mkShellNoCC {
             venvDir = ".venv";
 
+            # Runs before venvShellHook's create-or-activate decision: delete a
+            # stale venv when its Python no longer matches nixpkgs so the hook
+            # recreates it with the correct interpreter.
+            preShellHook = ''
+              if [[ -x "$venvDir/bin/python" ]]; then
+                venvPythonVersion="$("$venvDir/bin/python" -c 'import platform; print(platform.python_version())')"
+                if [[ "$venvPythonVersion" != "${python.version}" ]]; then
+                  echo "Python version mismatch: [$venvPythonVersion (venv)] != [${python.version}]"
+                  echo "Deleting '$venvDir' so it is recreated for Python ${python.version}"
+                  echo "(reinstall dependencies afterwards: pip install -e '.[test]')"
+                  rm -rf "$venvDir"
+                fi
+              fi
+            '';
+
             postShellHook = ''
               export CPATH="${pkgs.linuxHeaders}/include:$CPATH"
               export C_INCLUDE_PATH="${pkgs.linuxHeaders}/include:$C_INCLUDE_PATH"
               export CPLUS_INCLUDE_PATH="${pkgs.linuxHeaders}/include:$CPLUS_INCLUDE_PATH"
-
-              venvVersionWarn() {
-              	local venvVersion
-              	venvVersion="$("$venvDir/bin/python" -c 'import platform; print(platform.python_version())')"
-
-              	[[ "$venvVersion" == "${python.version}" ]] && return
-
-              	cat <<EOF
-              Warning: Python version mismatch: [$venvVersion (venv)] != [${python.version}]
-                       Delete '$venvDir' and reload to rebuild for version ${python.version}
-              EOF
-              }
-
-              venvVersionWarn
             '';
 
             packages =

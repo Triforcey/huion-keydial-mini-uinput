@@ -1,0 +1,112 @@
+name: Bump version and release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Semantic bump (ignored when an explicit version is given)'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+        required: true
+      version:
+        description: 'Explicit version (e.g. 2.0.0) — overrides the bump choice'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Compute new version
+        id: bump
+        env:
+          BUMP: ${{ inputs.bump }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'EOF'
+          import os, re, sys
+
+          s = open("pyproject.toml").read()
+          m = re.search(r'(?m)^version\s*=\s*"(\d+)\.(\d+)\.(\d+)"\s*$', s)
+          if not m:
+              sys.exit("::error::no version found in pyproject.toml")
+          current = ".".join(m.groups())
+
+          explicit = os.environ.get("VERSION", "").strip()
+          if explicit:
+              target = explicit
+          else:
+              maj, mi, pa = map(int, current.split("."))
+              target = {
+                  "major": f"{maj + 1}.0.0",
+                  "minor": f"{maj}.{mi + 1}.0",
+                  "patch": f"{maj}.{mi}.{pa + 1}",
+              }[os.environ.get("BUMP", "patch")]
+
+          if not re.fullmatch(r"\d+\.\d+\.\d+", target):
+              sys.exit(f"::error::Invalid version: {target}")
+          key = lambda v: tuple(map(int, v.split(".")))
+          if key(target) <= key(current):
+              sys.exit(f"::error::Version must increase: {current} -> {target}")
+
+          new = s.replace(m.group(0), f'version = "{target}"', 1)
+          if new == s:
+              sys.exit("::error::Version replacement failed")
+          open("pyproject.toml", "w").write(new)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"version={target}\ntag=v{target}\n")
+          print(f"Bumping {current} -> {target}")
+          EOF
+
+      - name: Verify tag does not exist
+        run: |
+          if git rev-parse -q --verify "refs/tags/${{ steps.bump.outputs.tag }}" >/dev/null; then
+            echo "::error::Tag ${{ steps.bump.outputs.tag }} already exists"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: |
+          pip install -e ".[test]"
+          pytest tests/ -q --tb=short
+
+      - name: Commit, push and tag
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+          TAG: ${{ steps.bump.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          git commit -m "bump version to $VERSION"
+          git pull --rebase origin main
+          git push origin HEAD:main
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+
+  release:
+    needs: bump
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.bump.outputs.tag }}
+    secrets: inherit

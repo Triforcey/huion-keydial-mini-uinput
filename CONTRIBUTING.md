@@ -316,12 +316,17 @@ For feature requests, include:
 
 ## Release Process
 
-1. **Version bump**: Update version in `pyproject.toml` (the Nix flake reads it from there)
-2. **Update changelog**: Document changes since last release
-3. **Tag release**: Create annotated git tag (`v*`) — this triggers the release workflow
-4. **Build packages**: GitHub Actions builds `.pkg.tar.zst`, `.deb`, `.rpm`, and the source
-   tarball and publishes them to GitHub Releases automatically
-5. **Publish**: Verify the release assets on the Releases page
+1. **Trigger the release**: Run the **"Bump version and release"** workflow
+   (Actions → Bump version and release → Run workflow). Pick a semantic bump
+   (patch/minor/major) or an explicit version. It bumps the version in
+   `pyproject.toml` (the single source of truth), runs the test suite, commits
+   and tags `v<version>` on `main`, and then builds and publishes the release.
+2. Alternatively, bump `pyproject.toml` manually and push a `v*` tag — the
+   release workflow runs on tag pushes too.
+3. **Build packages**: GitHub Actions builds `.pkg.tar.zst`, `.deb`, `.rpm`, and
+   the source tarball and publishes them to GitHub Releases automatically, with
+   release notes generated from commits since the last tag
+4. **Publish**: Verify the release assets on the Releases page
 
 ## License
 

@@ -42,7 +42,10 @@ un-patching Nix store paths out of the Nix build output. This means:
   `#!/usr/bin/env python3` shebangs that resolve to the target system's Python.
 - Runtime dependencies (`bleak`, `evdev`, ...) come from the target distribution's package
   manager, not from Nix.
-- The version is read from `pyproject.toml` at evaluation time — a single source of truth.
+- The version is read from `pyproject.toml` at evaluation time and injected everywhere it's
+  needed — the Nix packages, the `PKGBUILD` (`@PKGVER@`), the RPM spec (`@VERSION@`), and
+  the generated `DEBIAN/control` — so `pyproject.toml` is the single source of truth and
+  there are no version strings to keep in sync by hand.
 
 ## How shared assets are handled
 
@@ -63,12 +66,13 @@ which are system-level installs.
 
 ## What lives in this directory
 
-- `arch/PKGBUILD` — standard `makepkg` definition; expects a source tarball in `$srcdir`
-  (AUR-ready). `arch/README.md` documents the Arch-specific bits.
-- `debian/control`, `debian/changelog`, `debian/copyright` — kept as metadata reference;
-  the actual `DEBIAN/control` is generated at build time in the flake.
-- `debian/postinst`, `debian/prerm` — maintainer scripts installed into the `.deb`.
-- `rpm/huion-keydial-mini-driver.spec` — RPM spec used by `rpmbuild` in the flake.
+- `arch/PKGBUILD` — standard `makepkg` definition; expects a source tarball in `$srcdir`.
+  Its `@PKGVER@` version placeholder is substituted by the flake at build time.
+- `debian/postinst`, `debian/prerm` — maintainer scripts installed into the `.deb`. The
+  `DEBIAN/control` file is generated at build time in the flake; `debian/control`,
+  `debian/changelog`, and `debian/copyright` were removed as stale duplicates.
+- `rpm/huion-keydial-mini-driver.spec` — RPM spec used by `rpmbuild` in the flake. Its
+  `@VERSION@` version placeholder is substituted by the flake at build time.
 - `systemd/`, `udev/`, `config.yaml.default` — shared assets (see table above).
 - `install-udev.sh` — manual udev setup for the non-Nix `pip install` fallback; skips
   gracefully on read-only (atomic) filesystems.

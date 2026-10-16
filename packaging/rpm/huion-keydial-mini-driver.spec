@@ -1,5 +1,5 @@
 Name:           huion-keydial-mini-driver
-Version:        1.2.1
+Version:        @VERSION@
 Release:        1%{?dist}
 Summary:        User space driver for Huion Keydial Mini bluetooth device
 

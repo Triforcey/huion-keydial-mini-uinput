@@ -299,8 +299,10 @@
                             # Place source tarball where PKGBUILD expects it
                             cp $src/huion-keydial-mini-driver-${projectVersion}.tar.gz .
 
-                            # Copy PKGBUILD
+                            # Copy PKGBUILD and inject the project version
+                            # from pyproject.toml (the single source of truth)
                             cp ${./packaging/arch/PKGBUILD} ./PKGBUILD
+                            sed -i "s|@PKGVER@|${projectVersion}|" PKGBUILD
 
                             # Run makepkg with Nix-provided config
                             export HOME=$TMPDIR
@@ -356,8 +358,11 @@
               # Place source tarball
               cp $src/huion-keydial-mini-driver-${projectVersion}.tar.gz $RPMROOT/SOURCES/
 
-              # Place spec file
-              cp ${./packaging/rpm/huion-keydial-mini-driver.spec} $RPMROOT/SPECS/huion-keydial-mini-driver.spec
+              # Place spec file with the project version injected
+              # from pyproject.toml (the single source of truth)
+              sed "s|@VERSION@|${projectVersion}|" \
+                ${./packaging/rpm/huion-keydial-mini-driver.spec} \
+                > $RPMROOT/SPECS/huion-keydial-mini-driver.spec
 
               # Build
               rpmbuild -bb \

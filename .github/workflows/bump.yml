@@ -101,6 +101,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           BRANCH="chore/bump-$TAG"
+
+          # A previous failed run may have left this branch (and a dangling
+          # open PR for it) behind; remove it so this run starts clean.
+          # Deleting the branch also closes any open PR that used it.
+          if git ls-remote --heads origin "$BRANCH" | grep -q .; then
+            echo "Removing stale branch $BRANCH from a previous run"
+            git push origin --delete "$BRANCH"
+          fi
+
           git switch -c "$BRANCH"
           git add pyproject.toml
           git commit -m "bump version to $VERSION"
@@ -173,6 +182,17 @@ jobs:
           git tag -a "$TAG" -m "$TAG" "$SHA"
           git push origin "$TAG"
           echo "Tagged $TAG at $SHA"
+
+      - name: Clean up bump branch on failure
+        if: failure() && steps.bump.outputs.tag != ''
+        env:
+          TAG: ${{ steps.bump.outputs.tag }}
+        run: |
+          BRANCH="chore/bump-$TAG"
+          if git ls-remote --heads origin "$BRANCH" | grep -q .; then
+            echo "Removing $BRANCH after failed run"
+            git push origin --delete "$BRANCH"
+          fi
 
   release:
     needs: bump

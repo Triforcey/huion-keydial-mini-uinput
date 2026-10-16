@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "JD Flamm", email = "judsonwebdesign@gmail.com"}
 ]
 keywords = ["huion", "keydial", "bluetooth", "hid", "driver", "uinput"]
 classifiers = [
@@ -47,9 +47,9 @@ dev = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/your-username/huion-keydial-mini-uinput"
-"Bug Reports" = "https://github.com/your-username/huion-keydial-mini-uinput/issues"
-"Source" = "https://github.com/your-username/huion-keydial-mini-uinput"
+"Homepage" = "https://github.com/Triforcey/huion-keydial-mini-uinput"
+"Bug Reports" = "https://github.com/Triforcey/huion-keydial-mini-uinput/issues"
+"Source" = "https://github.com/Triforcey/huion-keydial-mini-uinput"
 
 [project.scripts]
 huion-keydial-mini = "huion_keydial_mini.main:main"

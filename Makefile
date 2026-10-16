@@ -1,4 +1,4 @@
-.PHONY: help install install-dev install-system install-all install-udev install-systemd install-config uninstall uninstall-all clean build test test-cov package-python package-arch package-debian package-rpm package-all uninstall-systemd uninstall-system uninstall-udev uninstall-config
+.PHONY: help install install-dev install-system install-all install-user install-user-all install-udev install-systemd install-user-systemd install-config uninstall uninstall-all clean build test test-cov package-python nix-build-all uninstall-systemd uninstall-system uninstall-udev uninstall-user uninstall-config
 
 PYTHON := python3
 PIP := pip3
@@ -14,10 +14,14 @@ help:
 	@echo "Huion Keydial Mini Driver - Make Commands"
 	@echo ""
 	@echo "Installation:"
-	@echo "  install       Install the package locally"
-	@echo "  install-dev   Install in development mode"
-	@echo "  install-all   Complete installation (system + services + udev)"
-	@echo "  uninstall-all Uninstall everything"
+	@echo "  install        Install the package locally"
+	@echo "  install-dev    Install in development mode"
+	@echo "  install-system Install system-wide (requires root)"
+	@echo "  install-all    Complete installation (system + services + udev)"
+	@echo ""
+	@echo "User-level installation (for atomic/read-only filesystems):"
+	@echo "  install-user       Install to user directory (~/.local)"
+	@echo "  install-user-all   Full user-level install (no root required)"
 	@echo ""
 	@echo "Development:"
 	@echo "  build         Build wheel package"
@@ -26,11 +30,8 @@ help:
 	@echo "  clean         Clean build artifacts"
 	@echo ""
 	@echo "Packaging:"
-	@echo "  package-python Build Python wheel (works on all systems)"
-	@echo "  package-arch   Build Arch Linux package (Arch/Manjaro only)"
-	@echo "  package-debian Build Debian package (Debian/Ubuntu only)"
-	@echo "  package-rpm    Build RPM package (Fedora/RHEL/openSUSE only)"
-	@echo "  package-all    Build all packages supported on current system"
+	@echo "  package-python  Build Python wheel package (works on all systems)"
+	@echo "  nix-build-all   Build all distro packages via Nix (Arch, Debian, RPM)"
 	@echo ""
 	@echo "Configuration:"
 	@echo "  Use 'keydialctl' command for runtime configuration"
@@ -46,6 +47,9 @@ install-dev:
 install-system: build-system
 	$(PYTHON) -m installer --prefix=/usr dist/*.whl
 
+install-user: build-system
+	$(PIP) install --user dist/*.whl
+
 build-system:
 	$(PYTHON) -m build
 
@@ -55,8 +59,6 @@ uninstall:
 install-udev:
 	@echo "Installing modprobe blacklist for device conflicts..."
 	sudo ./packaging/install-udev.sh
-
-
 
 install-config:
 	@echo "Installing configuration files with proper permissions..."
@@ -89,8 +91,6 @@ test:
 		pytest tests/ -v --tb=short; \
 	fi
 
-
-
 test-cov:
 	@echo "Running tests with coverage..."
 	@if command -v pytest >/dev/null 2>&1; then \
@@ -103,55 +103,12 @@ test-cov:
 
 package-python:
 	@echo "Building Python wheel package..."
-	./packaging/build.sh
+	$(PYTHON) -m build
 
-package-arch:
-	@echo "Building Arch Linux package..."
-	@if command -v makepkg >/dev/null 2>&1; then \
-		./packaging/arch/build.sh; \
-	else \
-		echo "Error: makepkg not found. This command only works on Arch Linux."; \
-		exit 1; \
-	fi
-
-package-debian:
-	@echo "Building Debian package..."
-	@if command -v dpkg-buildpackage >/dev/null 2>&1; then \
-		./packaging/debian/build.sh; \
-	else \
-		echo "Error: dpkg-buildpackage not found. This command only works on Debian/Ubuntu."; \
-		echo "Install with: sudo apt-get install dpkg-dev"; \
-		exit 1; \
-	fi
-
-package-rpm:
-	@echo "Building RPM package..."
-	@if command -v rpmbuild >/dev/null 2>&1; then \
-		./packaging/rpm/build.sh; \
-	else \
-		echo "Error: rpmbuild not found. This command only works on RPM-based systems."; \
-		echo "Install with: sudo dnf install rpm-build  # or sudo yum install rpm-build"; \
-		exit 1; \
-	fi
-
-package-all:
-	@echo "Building all packages supported on current system..."
-	@./packaging/build.sh
-	@if command -v makepkg >/dev/null 2>&1; then \
-		echo "Arch Linux detected - building Arch package..."; \
-		./packaging/arch/build.sh; \
-	fi
-	@if command -v dpkg-buildpackage >/dev/null 2>&1; then \
-		echo "Debian/Ubuntu detected - building Debian package..."; \
-		./packaging/debian/build.sh; \
-	fi
-	@if command -v rpmbuild >/dev/null 2>&1; then \
-		echo "RPM-based system detected - building RPM package..."; \
-		./packaging/rpm/build.sh; \
-	fi
-	@echo "Package building complete for all supported systems on this host"
-
-
+nix-build-all:
+	@echo "Building all distro packages via Nix..."
+	nix build .#arch-pkg .#deb-pkg .#rpm-pkg
+	@echo "Distro packages built. Check result/ directory for outputs."
 
 install-systemd:
 	@echo "Installing systemd services with proper permissions..."
@@ -160,6 +117,14 @@ install-systemd:
 	systemctl daemon-reload
 	@echo "Systemd services installed with proper permissions:"
 	@echo "  - User service: $(SERVICE_PERMS)"
+
+install-user-systemd:
+	@echo "Installing systemd user service..."
+	mkdir -p ~/.config/systemd/user
+	install -m $(SERVICE_PERMS) packaging/systemd/huion-keydial-mini-user-local.service ~/.config/systemd/user/huion-keydial-mini-user.service
+	@echo "Systemd user service installed to ~/.config/systemd/user/"
+	@echo "Enable with: systemctl --user enable huion-keydial-mini-user.service"
+	@echo "Start with: systemctl --user start huion-keydial-mini-user.service"
 
 uninstall-systemd:
 	rm -f /etc/systemd/user/huion-keydial-mini-user.service
@@ -172,11 +137,16 @@ uninstall-system:
 	rm -f /usr/bin/create-huion-keydial-uinput-device
 	rm -f /usr/bin/keydialctl
 
-# Additional installation targets with proper permissions
-install-all: install-system install-systemd install-udev
+install-all: install-system install-systemd
+	-./packaging/install-udev.sh || true
+	@echo ""
 	@echo "Full installation complete with proper permissions set"
+	@echo "Note: If udev installation failed, you may need to manually configure device access"
 
-
+install-user-all: install-user install-user-systemd install-config
+	@echo "User-level installation complete (no root required)"
+	@echo "Start the service with: systemctl --user start huion-keydial-mini-user.service"
+	@echo "Enable at boot with: systemctl --user enable huion-keydial-mini-user.service"
 
 uninstall-all: uninstall-system uninstall-systemd uninstall-udev
 	@echo "Complete uninstallation finished"
@@ -184,6 +154,12 @@ uninstall-all: uninstall-system uninstall-systemd uninstall-udev
 	@echo "Note: If you want to remove all traces, you may also want to:"
 	@echo "  - Remove user from input group: sudo gpasswd -d \$$USER input"
 	@echo "  - Remove any remaining log files: journalctl --vacuum-time=1s"
+
+uninstall-user:
+	@echo "Uninstalling user-level installation..."
+	$(PIP) uninstall -y huion-keydial-mini-driver 2>/dev/null || true
+	rm -f ~/.config/systemd/user/huion-keydial-mini-user.service
+	@echo "User-level uninstall complete"
 
 uninstall-udev:
 	@echo "Removing udev rules and scripts..."

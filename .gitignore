@@ -32,6 +32,8 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+# Exception: RPM spec file for this project
+!packaging/rpm/huion-keydial-mini-driver.spec
 
 # Installer logs
 pip-log.txt

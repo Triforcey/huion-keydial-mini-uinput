@@ -15,11 +15,45 @@ A Linux driver for the Huion Keydial Mini device that provides HID over GATT sup
 
 ## Installation
 
-### NixOS
+### NixOS (Recommended)
 
 See [NIXOS.md](./NIXOS.md) for NixOS-specific installation instructions using the provided flake.
 
-### Other Linux Distributions
+```bash
+# Build and run directly
+nix run .
+
+# Or install via NixOS module (add to configuration.nix):
+services.huion-keydial-mini.enable = true;
+```
+
+### Arch Linux
+
+```bash
+# Build the Arch package using Nix (works on any Linux distro with Nix installed)
+nix build .#arch-pkg
+sudo pacman -U result/*.pkg.tar.zst
+```
+
+### Debian/Ubuntu
+
+```bash
+# Build the .deb package using Nix (works on any Linux distro with Nix installed)
+nix build .#deb-pkg
+sudo dpkg -i result/*.deb
+```
+
+### Fedora/RHEL
+
+```bash
+# Build the .rpm package using Nix (works on any Linux distro with Nix installed)
+nix build .#rpm-pkg
+sudo rpm -i result/*.rpm
+```
+
+### Non-Nix Fallback (pip install)
+
+If you don't have Nix installed, you can still install via pip:
 
 ```bash
 # Clone the repository
@@ -43,6 +77,61 @@ nano ~/.config/huion-keydial-mini/config.yaml
 # Start the service
 systemctl --user enable --now huion-keydial-mini-user.service
 ```
+
+### Download Pre-Built Packages
+
+Pre-built packages for Arch, Debian, and Fedora are available on the [GitHub Releases page](../../releases). These are automatically built by CI on every tagged release.
+
+## Building from Source
+
+### Nix (Any Linux)
+
+With Nix installed, you can build all package formats from any Linux distro:
+
+```bash
+# Build the Nix package
+nix build .
+
+# Build a source tarball
+nix build .#source-tarball
+
+# Build all distro packages at once
+nix build .#arch-pkg .#deb-pkg .#rpm-pkg
+
+# Or use the Makefile target
+make nix-build-all
+```
+
+### Python Wheel (No Nix)
+
+```bash
+make build        # Builds wheel in dist/
+make package-python  # Same, explicit name
+```
+
+### Development
+
+```bash
+# Nix users: enter a development shell
+nix develop
+
+# Non-Nix users: install in development mode
+make install-dev
+
+# Run tests
+make test
+make test-cov
+
+# Format Nix files
+nix fmt
+```
+
+## CI/CD
+
+This project uses GitHub Actions for continuous integration and release management:
+
+- **Build & Test** (`.github/workflows/build.yml`): Runs on every pull request and push to `main`. Builds all flake outputs, runs tests, and verifies distro packages.
+- **Release** (`.github/workflows/release.yml`): Triggered on tag pushes (`v*`). Builds all distro packages and publishes them to a GitHub Release with downloadable artifacts.
 
 ## Usage
 
@@ -141,7 +230,7 @@ key_mappings: {}
 dial_settings:
   DIAL_CW: "KEY_VOLUMEUP"      # Send volume up when dial is turned clockwise
   DIAL_CCW: "KEY_VOLUMEDOWN"   # Send volume down when dial is turned counterclockwise
-  DIAL_CLICK: "KEY_MUTE"       # Send mute when dial is clicked
+  DIAL_CLICK: "KEY_MUTE"        # Send mute when dial is clicked
   sensitivity: 1.0             # Dial sensitivity (1.0 = normal, 2.0 = double, 0.5 = half)
 
 # UInput device settings

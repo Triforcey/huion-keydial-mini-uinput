@@ -319,8 +319,9 @@ For feature requests, include:
 1. **Trigger the release**: Run the **"Bump version and release"** workflow
    (Actions → Bump version and release → Run workflow). Pick a semantic bump
    (patch/minor/major) or an explicit version. It bumps the version in
-   `pyproject.toml` (the single source of truth), runs the test suite, commits
-   and tags `v<version>` on `main`, and then builds and publishes the release.
+   `pyproject.toml` (the single source of truth), runs the test suite, opens a
+   version-bump pull request, merges it once required checks pass, tags
+   `v<version>` on the merge commit, and then builds and publishes the release.
 2. Alternatively, bump `pyproject.toml` manually and push a `v*` tag — the
    release workflow runs on tag pushes too.
 3. **Build packages**: GitHub Actions builds `.pkg.tar.zst`, `.deb`, `.rpm`, and

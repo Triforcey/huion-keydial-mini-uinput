@@ -90,19 +90,88 @@ jobs:
           pip install -e ".[test]"
           pytest tests/ -q --tb=short
 
-      - name: Commit, push and tag
+      - name: Open version-bump pull request
+        id: pr
         env:
           VERSION: ${{ steps.bump.outputs.version }}
           TAG: ${{ steps.bump.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="chore/bump-$TAG"
+          git switch -c "$BRANCH"
           git add pyproject.toml
           git commit -m "bump version to $VERSION"
-          git pull --rebase origin main
-          git push origin HEAD:main
-          git tag -a "$TAG" -m "$TAG"
+          git push origin "HEAD:$BRANCH"
+
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "bump version to $VERSION" \
+            --body "Automatic version bump to **$VERSION** for release $TAG.
+
+          Created by the *Bump version and release* workflow. This PR is merged
+          automatically once required checks pass, after which the release tag
+          is created and the release workflow builds and publishes artifacts.")
+
+          echo "number=${PR_URL##*/}" >> $GITHUB_OUTPUT
+          echo "url=$PR_URL" >> $GITHUB_OUTPUT
+
+      - name: Wait for required checks, then merge
+        id: merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.pr.outputs.number }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+        run: |
+          merged=""
+          for i in $(seq 1 60); do
+            STATE=$(gh pr view "$PR" --json state,mergeStateStatus --jq '"\(.state):\(.mergeStateStatus)"')
+            case "$STATE" in
+              MERGED:*)
+                echo "PR was merged"
+                merged=1
+                break
+                ;;
+              OPEN:CLEAN)
+                gh pr merge "$PR" --squash --delete-branch
+                merged=1
+                break
+                ;;
+              OPEN:BEHIND)
+                gh api -X PUT "repos/${{ github.repository }}/pulls/$PR/update-branch" >/dev/null 2>&1 || true
+                sleep 30
+                ;;
+              OPEN:DIRTY)
+                echo "::error::Bump PR has merge conflicts. Resolve manually: $PR_URL"
+                exit 1
+                ;;
+              *)
+                sleep 30
+                ;;
+            esac
+          done
+
+          if [ -z "$merged" ]; then
+            echo "::error::Timed out waiting for the bump PR's required checks after 30 minutes. Check status at: $PR_URL"
+            exit 1
+          fi
+
+          SHA=$(gh pr view "$PR" --json mergeCommit --jq '.mergeCommit.oid')
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "Merged as $SHA"
+
+      - name: Tag the release commit
+        env:
+          TAG: ${{ steps.bump.outputs.tag }}
+          SHA: ${{ steps.merge.outputs.sha }}
+        run: |
+          git fetch origin main
+          git cat-file -e "$SHA^{commit}" 2>/dev/null || git fetch origin "$SHA"
+          git tag -a "$TAG" -m "$TAG" "$SHA"
           git push origin "$TAG"
+          echo "Tagged $TAG at $SHA"
 
   release:
     needs: bump

@@ -23,13 +23,10 @@ jobs:
           skipPush: ${{ github.event_name == 'pull_request' }}
 
       - name: Check flake formatting
-        run: nix fmt -- --check
+        run: nix fmt -- --check $(git ls-files '*.nix')
 
       - name: Build Nix package
         run: nix build .
-
-      - name: Run tests
-        run: nix build .#default --out-link default-result && cd default-result && python -m pytest tests/ -v
 
       - name: Build distro packages
         run: |

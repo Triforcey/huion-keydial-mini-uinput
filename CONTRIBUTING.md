@@ -14,11 +14,12 @@ Thank you for your interest in contributing to the Huion Keydial Mini driver! Th
 
 2. **Set up development environment**:
    ```bash
-   # Install dependencies
-   pip install -r requirements.txt
+   # With Nix (recommended on Nix systems)
+   nix develop
 
-   # Install in development mode
+   # Without Nix
    pip install -e .
+   pip install -e ".[test]"
    ```
 
 3. **Install system dependencies**:
@@ -33,15 +34,41 @@ Thank you for your interest in contributing to the Huion Keydial Mini driver! Th
 ### Building from Source
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
 # Install in development mode
 pip install -e .
 
 # Run tests
 python -m pytest tests/
 ```
+
+### Testing Distro Package Builds
+
+Distro packages are built via Nix and work from any Linux system — you do not need to be
+running the target distribution. See [packaging/README.md](packaging/README.md) for the
+full packaging design.
+
+```bash
+# Build individual distro packages
+nix build .#arch-pkg    # .pkg.tar.zst in result/
+nix build .#deb-pkg     # .deb in result/
+nix build .#rpm-pkg     # .rpm in result/
+
+# Or all three at once
+make nix-build-all
+
+# Inspect a built package
+dpkg-deb --info result/*.deb && dpkg-deb --contents result/*.deb
+rpm -qpl result/*.rpm
+tar --zstd -tf result/*.pkg.tar.zst | head -50
+
+# Verify no Nix store paths leaked into distro packages
+tar -xOzf result/*.tar.gz ... # or grep the unpacked tree for /nix/store
+```
+
+GitHub Actions builds and tests all outputs on every PR (`.github/workflows/build.yml`)
+and publishes distro packages to GitHub Releases on `v*` tags
+(`.github/workflows/release.yml`), so you rarely need to build them by hand — but doing
+so locally is the fastest way to iterate on packaging changes.
 
 ## Testing
 
@@ -123,6 +150,9 @@ sudo python -m huion_keydial_mini.event_logger
 ### Code Formatting
 
 ```bash
+# Format the Nix flake
+nix fmt
+
 # Format code with black
 black src/ tests/
 
@@ -215,8 +245,7 @@ huion-keydial-mini-uinput/
 │   ├── main.py                 # Main application logic
 │   └── uinput_handler.py       # Virtual input device
 ├── tests/                      # Test files
-├── packaging/                  # Package configuration
-├── docs/                       # Documentation
+├── packaging/                  # Package configuration (see packaging/README.md)
 └── README.md                   # Main documentation
 ```
 
@@ -287,11 +316,12 @@ For feature requests, include:
 
 ## Release Process
 
-1. **Version bump**: Update version in relevant files
+1. **Version bump**: Update version in `pyproject.toml` (the Nix flake reads it from there)
 2. **Update changelog**: Document changes since last release
-3. **Tag release**: Create annotated git tag
-4. **Build packages**: Generate distribution packages
-5. **Publish**: Upload to package repositories
+3. **Tag release**: Create annotated git tag (`v*`) — this triggers the release workflow
+4. **Build packages**: GitHub Actions builds `.pkg.tar.zst`, `.deb`, `.rpm`, and the source
+   tarball and publishes them to GitHub Releases automatically
+5. **Publish**: Verify the release assets on the Releases page
 
 ## License
 

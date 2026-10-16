@@ -1,0 +1,22 @@
+[Unit]
+Description=Huion Keydial Mini User Service (User Local Install)
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/huion-keydial-mini
+
+# User service - no need for root
+# Security settings for user service
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+PrivateDevices=false
+DevicePolicy=closed
+DeviceAllow=/dev/uinput rw
+DeviceAllow=/dev/input/* rw
+
+# Environment
+Environment=XDG_RUNTIME_DIR=/run/user/%i
+
+[Install]
+WantedBy=default.target

@@ -15,22 +15,16 @@ class BluetoothWatcher:
     """Watches for Bluetooth device connection/disconnection events using DBus."""
 
     def __init__(self, target_mac: Optional[str] = None, on_connect_callback: Optional[Callable] = None, on_disconnect_callback: Optional[Callable] = None):
-        self.target_mac = self._normalize_mac(target_mac) if target_mac else None
+        # Store in colon form (e.g. "20:23:06:01:B6:DD") to match the MAC
+        # produced by _dbus_path_to_mac() during signal filtering. Using the
+        # underscore/DBus-path form here would never match and silently drop
+        # every event for the target device.
+        self.target_mac = target_mac.upper() if target_mac else None
         self.on_connect_callback = on_connect_callback
         self.on_disconnect_callback = on_disconnect_callback
         self.bus: Optional[MessageBus] = None
         self.running = False
         self.debug_mode = False
-
-    def _normalize_mac(self, mac: str) -> str:
-        """Convert MAC address to DBus path format."""
-        # Convert XX:XX:XX:XX:XX:XX to XX_XX_XX_XX_XX_XX
-        return mac.replace(':', '_').upper()
-
-    def _mac_to_dbus_path(self, mac: str) -> str:
-        """Convert MAC address to DBus object path."""
-        normalized = self._normalize_mac(mac)
-        return f"/org/bluez/hci0/dev_{normalized}"
 
     def _dbus_path_to_mac(self, path: str) -> str:
         """Convert DBus object path to MAC address."""
@@ -61,6 +55,9 @@ class BluetoothWatcher:
 
                 # Subscribe to PropertiesChanged signals from BlueZ
                 await self._subscribe_to_signals()
+
+                # Check for devices that were already connected at startup
+                await self._check_existing_connections()
 
             logger.info("Bluetooth watcher started successfully")
 
@@ -93,6 +90,59 @@ class BluetoothWatcher:
         except Exception as e:
             logger.error(f"Failed to subscribe to signals: {e}")
             raise
+
+    async def _check_existing_connections(self):
+        """Fire the connect callback for devices already connected at startup.
+
+        The PropertiesChanged subscription only delivers connection *transitions*.
+        A device that was already connected before the watcher started would
+        otherwise never trigger a connect. Query BlueZ's ObjectManager for the
+        current set of objects and connect to any matching Device1 whose
+        ``Connected`` property is already true.
+        """
+        try:
+            if not self.bus:
+                return
+
+            reply = await self.bus.call(
+                Message(
+                    destination="org.bluez",
+                    path="/",
+                    interface="org.freedesktop.DBus.ObjectManager",
+                    member="GetManagedObjects",
+                )
+            )
+
+            if reply is None or reply.message_type != MessageType.METHOD_RETURN:
+                logger.debug("GetManagedObjects did not return successfully")
+                return
+
+            objects = reply.body[0]
+            for path, interfaces in objects.items():
+                device = interfaces.get("org.bluez.Device1")
+                if not device:
+                    continue
+
+                connected = device.get("Connected")
+                # Property values come back as dbus_next Variant objects.
+                if hasattr(connected, "value"):
+                    connected = connected.value
+                if not connected:
+                    continue
+
+                mac_address = self._dbus_path_to_mac(path)
+                if not mac_address:
+                    continue
+
+                if self.target_mac and mac_address.upper() != self.target_mac.upper():
+                    if self.debug_mode:
+                        logger.debug(f"Skipping already-connected non-target device: {mac_address}")
+                    continue
+
+                logger.info(f"Device {mac_address} already connected at startup")
+                await self._on_device_connected(mac_address)
+        except Exception as e:
+            logger.warning(f"Failed to check existing connections: {e}")
 
     async def stop(self):
         """Stop watching for Bluetooth connection events."""

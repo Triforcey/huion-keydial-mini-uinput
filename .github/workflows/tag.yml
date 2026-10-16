@@ -1,0 +1,51 @@
+name: Tag release version
+
+# Tags main with v<version> whenever pyproject.toml's version does not have a
+# tag yet — i.e. right after a version bump is merged (or manually re-run to
+# tag a version whose tag is missing).
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Tag pyproject version if untagged
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(python3 -c "
+          import re
+          s = open('pyproject.toml').read()
+          m = re.search(r'(?m)^version\s*=\s*\"(\d+)\.(\d+)\.(\d+)\"\s*\$', s)
+          assert m, 'no version found in pyproject.toml'
+          print('.'.join(m.groups()))")
+          TAG="v$VERSION"
+
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1 \
+             || git ls-remote --tags origin "refs/tags/$TAG" | grep -q .; then
+            echo "Tag $TAG already exists — nothing to do"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG" HEAD
+          git push origin "$TAG"
+          echo "Tagged $TAG at $(git rev-parse --short HEAD)"
